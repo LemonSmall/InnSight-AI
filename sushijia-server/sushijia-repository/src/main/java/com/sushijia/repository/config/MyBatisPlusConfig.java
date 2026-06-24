@@ -6,6 +6,7 @@ import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
 import com.sushijia.framework.tenant.TenantContext;
 import com.sushijia.common.utils.JwtUtil;
+import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -13,6 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * MyBatis-Plus 配置 —— 多租户 + 分页
  */
 @Configuration
+@MapperScan("com.sushijia.repository.mapper")
 public class MyBatisPlusConfig {
 
     @Bean

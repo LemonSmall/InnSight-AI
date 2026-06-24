@@ -45,7 +45,11 @@ public class ContentGenerateService {
         ContentTask task = new ContentTask();
         task.setTenantId(tenantId);
         task.setModuleKey(moduleKey);
-        task.setInputParams(objectMapper.writeValueAsString(params));
+        try {
+            task.setInputParams(objectMapper.writeValueAsString(params));
+        } catch (JsonProcessingException e) {
+            throw new BizException(ResultCode.BAD_REQUEST, "参数序列化失败");
+        }
         task.setStatus("pending");
         task.setCreatedAt(LocalDateTime.now());
         taskMapper.insert(task);

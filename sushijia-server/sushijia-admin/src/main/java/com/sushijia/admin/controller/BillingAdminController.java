@@ -62,7 +62,7 @@ public class BillingAdminController {
     @PostMapping("/tenants/{id}/recharge")
     public R<Map<String, Object>> recharge(@PathVariable Long id, @RequestBody Map<String, Integer> body) {
         int amount = body.getOrDefault("amount", 0);
-        String detail = "后台充值: " + body.getOrDefault("detail", "无备注");
+        String detail = "后台充值: " + body.getOrDefault("detail", null);
         int balance = creditService.recharge(id, amount, detail);
         return R.ok(Map.of("tenantId", id, "balance", balance));
     }

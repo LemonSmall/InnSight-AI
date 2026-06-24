@@ -33,6 +33,7 @@
         <jjwt.version>0.12.5</jjwt.version>
         <knife4j.version>4.5.0</knife4j.version>
         <redisson.version>3.30.0</redisson.version>
+        <ttl.version>2.14.5</ttl.version>
     </properties>
 
     <dependencyManagement>
@@ -56,6 +57,16 @@
             <dependency>
                 <groupId>com.sushijia</groupId>
                 <artifactId>sushijia-ai</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sushijia</groupId>
+                <artifactId>sushijia-hotel</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.sushijia</groupId>
+                <artifactId>sushijia-admin</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -89,6 +100,11 @@
                 <groupId>org.redisson</groupId>
                 <artifactId>redisson-spring-boot-starter</artifactId>
                 <version>${redisson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.alibaba</groupId>
+                <artifactId>transmittable-thread-local</artifactId>
+                <version>${ttl.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
