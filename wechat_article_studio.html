@@ -1,0 +1,476 @@
+
+<h2 class="sr-only">公众号推文创作工作台——标题/摘要/正文一站式AI生成，生成后锁定</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:14px;color:var(--color-text-primary)}
+.page{display:flex;flex-direction:column;min-height:620px}
+.page-hd{padding:15px 18px 13px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.page-title{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.page-title i{font-size:18px;color:#185FA5}
+.page-sub{font-size:12px;color:var(--color-text-secondary)}
+.pills{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.cost-pill{background:#E6F1FB;color:#0C447C;font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px}
+.credits-pill{display:flex;align-items:center;gap:5px;background:#EAF3DE;border-radius:20px;padding:5px 12px;font-size:12px;color:#27500A;font-weight:500}
+
+.body{flex:1;display:grid;grid-template-columns:256px 1fr;min-height:0}
+.col-left{border-right:0.5px solid var(--color-border-tertiary);padding:15px;overflow:auto;display:flex;flex-direction:column;gap:11px;transition:opacity .25s}
+.col-right{overflow:auto;display:flex;flex-direction:column}
+
+.sec{font-size:9px;font-weight:500;letter-spacing:.07em;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:7px}
+.fl{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:4px}
+select,input,textarea{width:100%;padding:7px 10px;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#185FA5}
+textarea{resize:vertical}
+
+/* source chips */
+.src-col{display:flex;flex-direction:column;gap:5px}
+.src-chip{padding:9px 11px;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);transition:all .15s;user-select:none;display:flex;align-items:center;gap:9px}
+.src-chip.on{background:#E6F1FB;border-color:#378ADD;color:#185FA5;font-weight:500}
+.src-chip:hover:not(.on){border-color:#378ADD}
+.src-icon{width:26px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.src-info{}
+.src-name{font-size:11px;font-weight:500;line-height:1.3}
+.src-desc{font-size:10px;opacity:.65;margin-top:1px}
+
+/* style chips */
+.style-row{display:flex;gap:5px;flex-wrap:wrap}
+.style-chip{padding:5px 10px;border-radius:20px;font-size:11px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);transition:all .15s;user-select:none}
+.style-chip.on{background:#185FA5;color:#fff;border-color:#185FA5}
+.style-chip:hover:not(.on){border-color:#378ADD}
+
+.gen-btn{width:100%;padding:11px;border-radius:var(--border-radius-md);background:#185FA5;color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;margin-top:auto}
+.gen-btn:hover{background:#0C447C}
+.gen-btn:disabled{background:var(--color-background-secondary);color:var(--color-text-secondary);cursor:not-allowed}
+
+.tip{border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;padding:9px 12px;font-size:11px;line-height:1.65}
+.tip-b{background:#E6F1FB;color:#185FA5;border-left:3px solid #378ADD}
+.tip-o{background:#FAEEDA;color:#633806;border-left:3px solid #EF9F27}
+
+/* 右侧 */
+.st-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:8px;color:var(--color-text-secondary);padding:24px;background:var(--color-background-secondary)}
+.st-empty i{font-size:36px;opacity:.18}
+.st-empty p{font-size:13px;text-align:center;line-height:1.6}
+.st-empty small{font-size:11px;opacity:.7;text-align:center}
+
+.st-loading{display:none;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:12px;color:var(--color-text-secondary);padding:24px;background:var(--color-background-secondary)}
+.st-loading.show{display:flex}
+.spin{animation:sp 1s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ls-steps{display:flex;flex-direction:column;gap:6px;margin-top:6px;min-width:220px}
+.ls{font-size:11px;display:flex;align-items:center;gap:7px;opacity:.3;transition:all .3s}
+.ls.on{opacity:1;color:#185FA5}.ls.done{opacity:.5}
+
+/* 文章预览区 */
+.article-wrap{display:none;flex-direction:column;flex:1}
+.article-wrap.show{display:flex}
+
+/* 顶部操作栏 */
+.action-bar{padding:11px 16px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0;background:var(--color-background-primary)}
+.ab-left{display:flex;align-items:center;gap:7px}
+.lock-badge{display:flex;align-items:center;gap:5px;font-size:11px;color:#633806;background:#FAEEDA;padding:4px 10px;border-radius:20px}
+.ab-right{display:flex;gap:6px}
+
+/* 推文预览 —— 仿微信公众号样式 */
+.article-scroll{flex:1;overflow:auto;background:var(--color-background-secondary);padding:20px}
+.article-card{max-width:560px;margin:0 auto;background:var(--color-background-primary);border-radius:var(--border-radius-lg);overflow:hidden;box-shadow:0 2px 16px rgba(0,0,0,.06)}
+
+/* 封面 */
+.art-cover{height:200px;background:linear-gradient(160deg,#0a2718,#1a4a2e,#2d7a4e);position:relative;display:flex;align-items:flex-end;padding:16px}
+.art-cover-text{position:relative;z-index:1}
+.art-title-preview{font-size:18px;font-weight:500;color:#fff;line-height:1.4;margin-bottom:6px}
+.art-account{font-size:11px;color:rgba(255,255,255,.6);display:flex;align-items:center;gap:5px}
+.art-cover-overlay{position:absolute;inset:0;background:linear-gradient(transparent 30%,rgba(0,0,0,.65))}
+
+/* 正文 */
+.art-body{padding:20px 22px}
+.art-digest{font-size:13px;color:var(--color-text-secondary);line-height:1.7;padding:10px 14px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);margin-bottom:16px;border-left:3px solid #378ADD;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0}
+.art-content{font-size:13px;line-height:2;color:var(--color-text-primary);white-space:pre-wrap;word-break:break-word}
+.art-content h3{font-size:14px;font-weight:500;margin:16px 0 8px;color:var(--color-text-primary)}
+.art-footer{padding:14px 22px;border-top:0.5px solid var(--color-border-tertiary);display:flex;align-items:center;justify-content:space-between}
+.art-footer-left{font-size:11px;color:var(--color-text-secondary)}
+.art-footer-right{display:flex;gap:12px}
+.art-engage{font-size:11px;color:var(--color-text-secondary);display:flex;align-items:center;gap:4px}
+
+/* 标题备选 */
+.title-section{padding:14px 16px;border-bottom:0.5px solid var(--color-border-tertiary);background:var(--color-background-primary);flex-shrink:0}
+.ts-label{font-size:10px;font-weight:500;letter-spacing:.05em;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:8px}
+.title-list{display:flex;flex-direction:column;gap:5px}
+.title-item{display:flex;align-items:flex-start;gap:8px;padding:8px 11px;background:var(--color-background-secondary);border-radius:var(--border-radius-md);cursor:pointer;border:0.5px solid transparent;transition:all .15s}
+.title-item:hover{border-color:#378ADD;background:#E6F1FB}
+.title-num{font-size:10px;font-weight:500;color:#185FA5;flex-shrink:0;margin-top:2px;width:16px}
+.title-text{font-size:12px;color:var(--color-text-primary);flex:1;line-height:1.5}
+.title-copy{font-size:10px;color:var(--color-text-secondary);flex-shrink:0;margin-top:2px}
+.title-item:hover .title-copy{color:#185FA5}
+.title-tip{font-size:10px;color:var(--color-text-secondary);margin-top:6px}
+
+.btn{padding:6px 12px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;font-family:var(--font-sans);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);display:inline-flex;align-items:center;gap:5px;transition:all .15s}
+.btn:hover{background:var(--color-background-secondary)}
+.bp{background:#185FA5;color:#fff;border-color:#185FA5}
+.bp:hover{background:#0C447C}
+.divider{height:0.5px;background:var(--color-border-tertiary)}
+</style>
+
+<div class="page">
+<div class="page-hd">
+  <div>
+    <div class="page-title"><i class="ti ti-news" aria-hidden="true"></i>公众号推文</div>
+    <div class="page-sub">标题 × 3 · 摘要 · 完整正文，一次生成可直接发布的推文</div>
+  </div>
+  <div class="pills">
+    <div class="cost-pill">消耗 10 积分 / 次</div>
+    <div class="credits-pill"><i class="ti ti-bolt" style="font-size:13px" aria-hidden="true"></i><span id="credits-num">1,224</span> 积分</div>
+  </div>
+</div>
+
+<div class="body">
+
+<!-- 左列配置 -->
+<div class="col-left" id="col-left">
+
+  <div>
+    <div class="sec">内容来源</div>
+    <div class="src-col" id="src-col">
+      <div class="src-chip on" data-val="ai">
+        <div class="src-icon" style="background:#E6F1FB"><i class="ti ti-sparkles" style="font-size:13px;color:#185FA5" aria-hidden="true"></i></div>
+        <div class="src-info">
+          <div class="src-name">AI 全新创作</div>
+          <div class="src-desc">基于酒店信息和节假日生成</div>
+        </div>
+      </div>
+      <div class="src-chip" data-val="douyin">
+        <div class="src-icon" style="background:#EEEDFE"><i class="ti ti-brand-tiktok" style="font-size:13px;color:#3C3289" aria-hidden="true"></i></div>
+        <div class="src-info">
+          <div class="src-name">由抖音内容扩写</div>
+          <div class="src-desc">口播脚本一键转长图文</div>
+        </div>
+      </div>
+      <div class="src-chip" data-val="xhs">
+        <div class="src-icon" style="background:#FBEAF0"><i class="ti ti-brand-instagram" style="font-size:13px;color:#D4537E" aria-hidden="true"></i></div>
+        <div class="src-info">
+          <div class="src-name">由小红书笔记扩写</div>
+          <div class="src-desc">种草图文一键升级推文</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="fl">推文主题</div>
+    <select id="sel-theme">
+      <option value="holiday">端午假期活动推文</option>
+      <option value="explore">民宿探店深度体验</option>
+      <option value="guide">周边玩法深度攻略</option>
+      <option value="summer">暑假亲子出行指南</option>
+      <option value="season">季节限定体验</option>
+      <option value="story">民宿主人的故事</option>
+    </select>
+  </div>
+
+  <div>
+    <div class="fl">写作风格</div>
+    <div class="style-row" id="style-row">
+      <div class="style-chip on" data-val="warm">温暖治愈</div>
+      <div class="style-chip" data-val="story">故事叙事</div>
+      <div class="style-chip" data-val="guide">干货攻略</div>
+      <div class="style-chip" data-val="poetic">文艺诗意</div>
+    </div>
+  </div>
+
+  <div>
+    <div class="fl">推文长度</div>
+    <select id="sel-length">
+      <option value="short">短篇（600字，适合活动推送）</option>
+      <option value="mid" selected>中篇（900字，推荐）</option>
+      <option value="long">长篇（1200字，深度内容）</option>
+    </select>
+  </div>
+
+  <div>
+    <div class="fl">核心卖点 <span style="font-weight:400;opacity:.6">（选填）</span></div>
+    <textarea id="inp-point" rows="2" placeholder="如：端午送手工香包礼包、竹林下午茶新品上线、暑假亲子采摘活动..."></textarea>
+  </div>
+
+  <div id="src-extra" style="display:none">
+    <div class="fl">原始内容 <span style="font-weight:400;opacity:.6">（粘贴后扩写）</span></div>
+    <textarea id="inp-src" rows="4" placeholder="粘贴你的抖音口播脚本或小红书正文内容..."></textarea>
+  </div>
+
+  <div class="tip tip-b">
+    <strong>📌 推文发布技巧：</strong>节日前 2–3 天是最佳发布窗口；标题用「痛点+解决方案」或悬念式开头；正文配 3–6 张实景图效果最好；结尾设置「点击预订」小程序按钮。
+  </div>
+
+  <button class="gen-btn" id="gen-btn" onclick="generate()">
+    <i class="ti ti-sparkles" aria-hidden="true"></i>AI 生成公众号推文
+  </button>
+</div>
+
+<!-- 右侧 -->
+<div class="col-right">
+
+  <div class="st-empty" id="st-empty">
+    <i class="ti ti-news" aria-hidden="true"></i>
+    <p>配置好参数后点击生成<br>AI 将输出可直接发布的完整推文</p>
+    <small>含标题 × 3 · 摘要 · 正文全文<br>消耗 10 积分，生成后锁定</small>
+  </div>
+
+  <div class="st-loading" id="st-loading">
+    <i class="ti ti-loader spin" style="font-size:28px;color:#185FA5" aria-hidden="true"></i>
+    <div class="ls-steps">
+      <div class="ls" id="ls1"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>分析今日节假日与酒店信息</div>
+      <div class="ls" id="ls2"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>生成三个差异化爆款标题</div>
+      <div class="ls" id="ls3"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>撰写封面摘要与正文结构</div>
+      <div class="ls" id="ls4"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>完善正文内容与预订引导</div>
+    </div>
+  </div>
+
+  <div class="article-wrap" id="article-wrap">
+
+    <!-- 操作栏 -->
+    <div class="action-bar">
+      <div class="ab-left">
+        <div class="lock-badge"><i class="ti ti-lock" style="font-size:11px" aria-hidden="true"></i>已生成锁定</div>
+        <span style="font-size:11px;color:var(--color-text-secondary)">如需修改请重新生成</span>
+      </div>
+      <div class="ab-right">
+        <button class="btn" onclick="copyFull()"><i class="ti ti-copy" aria-hidden="true"></i>复制全文</button>
+        <button class="btn bp" onclick="resetAll()"><i class="ti ti-refresh" aria-hidden="true"></i>重新生成</button>
+      </div>
+    </div>
+
+    <!-- 标题备选 -->
+    <div class="title-section">
+      <div class="ts-label">标题备选 × 3（点击复制，建议 A/B 测试）</div>
+      <div class="title-list" id="title-list"></div>
+      <div class="title-tip">💡 第①个：悬念/情绪型；第②个：痛点解决型；第③个：数字/利益型 — 各有侧重，按需选用</div>
+    </div>
+
+    <!-- 推文预览 -->
+    <div class="article-scroll">
+      <div class="article-card">
+        <div class="art-cover">
+          <div class="art-cover-overlay"></div>
+          <div class="art-cover-text">
+            <div class="art-title-preview" id="cover-title">推文标题</div>
+            <div class="art-account"><i class="ti ti-building" style="font-size:10px" aria-hidden="true"></i>松间·山野民宿</div>
+          </div>
+        </div>
+        <div class="art-body">
+          <div class="art-digest" id="art-digest">摘要预览...</div>
+          <div class="art-content" id="art-content">正文加载中...</div>
+        </div>
+        <div class="art-footer">
+          <div class="art-footer-left">松间·山野民宿</div>
+          <div class="art-footer-right">
+            <div class="art-engage"><i class="ti ti-eye" style="font-size:11px" aria-hidden="true"></i>2,341</div>
+            <div class="art-engage"><i class="ti ti-heart" style="font-size:11px" aria-hidden="true"></i>186</div>
+            <div class="art-engage"><i class="ti ti-bookmark" style="font-size:11px" aria-hidden="true"></i>94</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+</div>
+</div>
+</div>
+
+<script>
+const HOTEL={
+  name:'松间·山野民宿',type:'精品民宿',location:'浙江·莫干山',
+  features:'竹林景观、私汤温泉、无边泳池、有机早餐',
+  target:'面向长三角城市中产，主打情侣度假与亲子出行',
+  nearby:'距莫干山景区5分钟，竹林徒步、茶园采摘',
+  weather:'小雨，19°C',day:'周四',holiday:'距端午节还有3天'
+};
+let credits=1224;
+let generated=false;
+let lastResult=null;
+
+// src chips
+document.querySelectorAll('.src-chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    if(generated)return;
+    document.querySelectorAll('.src-chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+    document.getElementById('src-extra').style.display=c.dataset.val==='ai'?'none':'block';
+  });
+});
+// style chips
+document.querySelectorAll('.style-chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    if(generated)return;
+    document.querySelectorAll('.style-chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+  });
+});
+
+function getSrc(){return document.querySelector('.src-chip.on')?.dataset.val||'ai';}
+function getStyle(){return document.querySelector('.style-chip.on')?.dataset.val||'warm';}
+
+function buildPrompt(){
+  const src=getSrc();
+  const theme=document.getElementById('sel-theme').value;
+  const style=getStyle();
+  const length=document.getElementById('sel-length').value;
+  const point=document.getElementById('inp-point').value;
+  const srcText=document.getElementById('inp-src').value;
+  const themeMap={holiday:'端午假期活动推文',explore:'民宿探店深度体验',guide:'周边玩法深度攻略',summer:'暑假亲子出行指南',season:'季节限定体验',story:'民宿主人的故事'};
+  const styleMap={warm:'温暖治愈（像老朋友娓娓道来）',story:'故事叙事（有人物有情节）',guide:'干货攻略（有实用信息）',poetic:'文艺诗意（有意境有留白）'};
+  const lenMap={short:'600字左右',mid:'900字左右',long:'1200字左右'};
+  const srcDesc=src==='ai'?'AI全新创作':src==='douyin'?`基于以下抖音脚本扩写：\n${srcText}`:`基于以下小红书正文扩写：\n${srcText}`;
+  return`你是${HOTEL.name}的公众号主编，请生成一篇完整的微信公众号推文。
+
+【酒店信息】
+名称：${HOTEL.name}（${HOTEL.type}）| 位置：${HOTEL.location}
+核心特色：${HOTEL.features} | 目标客群：${HOTEL.target}
+周边资源：${HOTEL.nearby}
+今日节点：${HOTEL.holiday}，天气：${HOTEL.weather}
+
+【创作要求】
+内容来源：${srcDesc}
+推文主题：${themeMap[theme]||'端午假期活动推文'}
+写作风格：${styleMap[style]||'温暖治愈'}
+正文长度：${lenMap[length]||'900字左右'}
+${point?'核心卖点：'+point:''}
+
+【严格按以下格式输出，不要任何额外说明】
+
+[标题1]
+（悬念/情绪型，让人忍不住点开，含emoji）
+
+[标题2]
+（痛点解决型，直接说明利益点，含地名关键词）
+
+[标题3]
+（数字/利益型，有具体信息，制造好奇）
+
+[摘要]
+（55字以内，公众号封面下方的预览文字，吸引点击）
+
+[正文]
+（${lenMap[length]}，分2-4个小节，每节有小标题，有场景感和情绪，自然植入酒店特色，结尾有预订引导，适合图文排版）`;
+}
+
+function parseResult(text){
+  const g=(key,nxt)=>{
+    const re=new RegExp(`\\[${key}\\]\\s*([\\s\\S]*?)(?=\\[${nxt}\\]|$)`,'i');
+    const m=text.match(re);return m?m[1].trim():'';
+  };
+  const r={
+    titles:[
+      g('标题1','标题2'),
+      g('标题2','标题3'),
+      g('标题3','摘要')
+    ].filter(t=>t),
+    digest:g('摘要','正文'),
+    body:g('正文','$')
+  };
+  return r;
+}
+
+function renderResult(r){
+  // 封面标题用第一个
+  const coverTitle=r.titles[0]||'推文标题';
+  document.getElementById('cover-title').textContent=coverTitle.replace(/[🎋🌿💑👨‍👩‍👧⚡🏠🌧️]/g,'').trim();
+  // 标题列表
+  const list=document.getElementById('title-list');
+  list.innerHTML=r.titles.map((t,i)=>`
+    <div class="title-item" onclick="cpTitle(this,'${t.replace(/'/g,"\\'").replace(/\n/g,' ')}')">
+      <span class="title-num">0${i+1}</span>
+      <span class="title-text">${t.replace(/</g,'&lt;')}</span>
+      <span class="title-copy">点击复制</span>
+    </div>`).join('');
+  // 摘要
+  document.getElementById('art-digest').textContent=r.digest||'';
+  // 正文 — 渲染小标题
+  const formatted=r.body.replace(/^#{1,3}\s*(.+)$/gm,'<h3>$1</h3>').replace(/\n\n/g,'\n');
+  const bodyEl=document.getElementById('art-content');
+  bodyEl.innerHTML=formatted;
+  lastResult=r;
+}
+
+let lsTimer=null;
+function startLS(){
+  ['ls1','ls2','ls3','ls4'].forEach(id=>{const e=document.getElementById(id);if(e){e.classList.remove('on','done');}});
+  let i=0;const ids=['ls1','ls2','ls3','ls4'];
+  lsTimer=setInterval(()=>{
+    if(i>0){const p=document.getElementById(ids[i-1]);if(p){p.classList.remove('on');p.classList.add('done');}}
+    if(i<ids.length){const c=document.getElementById(ids[i]);if(c)c.classList.add('on');i++;}
+    else clearInterval(lsTimer);
+  },900);
+}
+
+function lockLeft(){
+  generated=true;
+  const left=document.getElementById('col-left');
+  left.style.opacity='.42';
+  left.style.pointerEvents='none';
+}
+function unlockLeft(){
+  generated=false;
+  const left=document.getElementById('col-left');
+  left.style.opacity='';
+  left.style.pointerEvents='';
+}
+
+async function generate(){
+  if(credits<10){alert('算力不足，请充值后继续');return;}
+  document.getElementById('st-empty').style.display='none';
+  document.getElementById('article-wrap').classList.remove('show');
+  document.getElementById('st-loading').classList.add('show');
+  document.getElementById('gen-btn').disabled=true;
+  startLS();
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:2000,messages:[{role:'user',content:buildPrompt()}]})
+    });
+    const data=await resp.json();
+    clearInterval(lsTimer);
+    const text=data.content&&data.content[0]?data.content[0].text:'';
+    const parsed=parseResult(text);
+    credits-=10;
+    document.getElementById('credits-num').textContent=credits.toLocaleString();
+    renderResult(parsed);
+    document.getElementById('st-loading').classList.remove('show');
+    document.getElementById('article-wrap').classList.add('show');
+    lockLeft();
+  }catch(e){
+    clearInterval(lsTimer);
+    document.getElementById('st-loading').classList.remove('show');
+    document.getElementById('st-empty').style.display='flex';
+    document.getElementById('st-empty').querySelector('p').textContent='生成失败，请检查网络后重试';
+  }
+  document.getElementById('gen-btn').disabled=false;
+}
+
+function resetAll(){
+  unlockLeft();
+  document.getElementById('article-wrap').classList.remove('show');
+  document.getElementById('st-empty').style.display='flex';
+  document.getElementById('st-empty').querySelector('p').textContent='配置好参数后点击生成\nAI 将输出可直接发布的完整推文';
+  lastResult=null;
+}
+
+function cpTitle(el,text){
+  navigator.clipboard.writeText(text).then(()=>{
+    const orig=el.querySelector('.title-copy').textContent;
+    el.querySelector('.title-copy').textContent='✓ 已复制';
+    el.style.borderColor='#378ADD';el.style.background='#E6F1FB';
+    setTimeout(()=>{el.querySelector('.title-copy').textContent=orig;el.style.borderColor='';el.style.background='';},1500);
+  }).catch(()=>{});
+}
+
+function copyFull(){
+  if(!lastResult)return;
+  const titles=lastResult.titles.map((t,i)=>`标题0${i+1}：${t}`).join('\n');
+  const full=`${titles}\n\n【摘要】\n${lastResult.digest}\n\n【正文】\n${lastResult.body}`;
+  navigator.clipboard.writeText(full).then(()=>{
+    const btn=event.target.closest('button');
+    const orig=btn.innerHTML;
+    btn.innerHTML='<i class="ti ti-check"></i> 已复制';
+    setTimeout(()=>btn.innerHTML=orig,1800);
+  }).catch(()=>{});
+}
+</script>

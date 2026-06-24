@@ -1,0 +1,70 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-cream-100 text-bamboo-800 font-sans antialiased;
+    font-size: 14px;
+    line-height: 1.6;
+  }
+  
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    background: #D1C9BC;
+    border-radius: 2px;
+  }
+}
+
+@layer components {
+  .card {
+    @apply bg-white border border-cream-300/60 rounded-xl p-5 shadow-sm;
+  }
+  
+  .btn-primary {
+    @apply bg-bamboo-800 text-cream-100 px-4 py-2 rounded-lg text-sm font-medium 
+           hover:bg-bamboo-900 active:scale-[0.98] transition-all duration-150
+           inline-flex items-center gap-2;
+  }
+  
+  .btn-secondary {
+    @apply bg-white border border-cream-300 text-bamboo-700 px-4 py-2 rounded-lg text-sm font-medium 
+           hover:bg-cream-100 active:scale-[0.98] transition-all duration-150
+           inline-flex items-center gap-2;
+  }
+  
+  .btn-ghost {
+    @apply text-bamboo-600 px-3 py-1.5 rounded-lg text-sm font-medium 
+           hover:bg-bamboo-50 active:scale-[0.98] transition-all duration-150
+           inline-flex items-center gap-1.5;
+  }
+  
+  .input-field {
+    @apply w-full px-3 py-2 border border-cream-300 rounded-lg text-sm
+           bg-white text-bamboo-800 placeholder:text-bamboo-300
+           focus:outline-none focus:border-bamboo-400 focus:ring-1 focus:ring-bamboo-200
+           transition-all duration-150;
+  }
+  
+  .label {
+    @apply text-xs font-medium text-warm-600 uppercase tracking-wide mb-1.5 block;
+  }
+
+  .badge {
+    @apply text-xs font-medium px-2.5 py-1 rounded-full inline-flex items-center gap-1;
+  }
+  
+  .badge-green { @apply bg-bamboo-100 text-bamboo-700; }
+  .badge-amber { @apply bg-amber-50 text-warm-400; }
+  .badge-blue { @apply bg-blue-50 text-blue-600; }
+  .badge-rose { @apply bg-rose-50 text-rose-400; }
+  .badge-purple { @apply bg-purple-50 text-purple-600; }
+}

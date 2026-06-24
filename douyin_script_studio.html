@@ -1,0 +1,637 @@
+
+<h2 class="sr-only">抖音口播脚本创作工作台——钩子/口播/行动指令三段式AI生成，含镜头提示和BGM建议</h2>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:var(--font-sans);font-size:14px;color:var(--color-text-primary)}
+.page{display:flex;flex-direction:column;min-height:600px}
+
+.page-hd{padding:15px 18px 13px;border-bottom:0.5px solid var(--color-border-tertiary);display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.page-title{font-size:15px;font-weight:500;display:flex;align-items:center;gap:8px;margin-bottom:3px}
+.page-title i{font-size:18px;color:#3C3289}
+.page-sub{font-size:12px;color:var(--color-text-secondary)}
+.pills{display:flex;align-items:center;gap:7px;flex-shrink:0}
+.cost-pill{background:#EEEDFE;color:#3C3289;font-size:11px;font-weight:500;padding:4px 10px;border-radius:20px}
+.credits-pill{display:flex;align-items:center;gap:5px;background:#EAF3DE;border-radius:20px;padding:5px 12px;font-size:12px;color:#27500A;font-weight:500}
+
+.body{flex:1;display:grid;grid-template-columns:284px 1fr;min-height:0}
+.left{border-right:0.5px solid var(--color-border-tertiary);padding:15px;overflow:auto;display:flex;flex-direction:column;gap:11px}
+.right{overflow:auto;display:flex;flex-direction:column;background:var(--color-background-secondary)}
+
+/* ctx */
+.ctx-card{background:var(--color-background-secondary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px}
+.ctx-title{font-size:9px;font-weight:500;letter-spacing:.07em;color:var(--color-text-secondary);text-transform:uppercase;margin-bottom:8px}
+.ctx-row{display:flex;justify-content:space-between;align-items:center;font-size:11px;margin-bottom:5px}
+.ctx-row:last-child{margin-bottom:0}
+.ctx-k{color:var(--color-text-secondary);display:flex;align-items:center;gap:4px}
+.ctx-v{font-weight:500}.ctx-v.g{color:#27500A}.ctx-v.o{color:#633806}
+
+.fl{font-size:11px;font-weight:500;color:var(--color-text-secondary);margin-bottom:4px}
+select,input,textarea{width:100%;padding:7px 10px;font-size:12px;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);background:var(--color-background-primary);color:var(--color-text-primary);font-family:var(--font-sans)}
+select:focus,input:focus,textarea:focus{outline:none;border-color:#7F77DD}
+textarea{resize:vertical}
+
+/* duration chips */
+.dur-row{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.dur-chip{padding:7px 4px;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);transition:all .15s;text-align:center;user-select:none}
+.dur-chip.on{background:#EEEDFE;border-color:#7F77DD;color:#3C3289;font-weight:500}
+.dur-chip:hover:not(.on){border-color:#7F77DD}
+
+/* type chips */
+.type-col{display:flex;flex-direction:column;gap:5px}
+.type-chip{padding:8px 11px;border-radius:var(--border-radius-md);font-size:11px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);transition:all .15s;user-select:none;line-height:1.4}
+.type-chip.on{background:#EEEDFE;border-color:#7F77DD;color:#3C3289;font-weight:500}
+.type-chip:hover:not(.on){border-color:#7F77DD}
+.type-name{font-weight:500;margin-bottom:1px}
+.type-desc{font-size:10px;opacity:.7}
+
+.tip{border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;padding:9px 12px;font-size:11px;line-height:1.65}
+.tip-v{background:#EEEDFE;color:#3C3289;border-left:3px solid #7F77DD}
+.tip-o{background:#FAEEDA;color:#633806;border-left:3px solid #EF9F27}
+
+.gen-btn{width:100%;padding:11px;border-radius:var(--border-radius-md);background:#3C3289;color:#fff;border:none;font-size:13px;font-weight:500;cursor:pointer;font-family:var(--font-sans);display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s;margin-top:auto}
+.gen-btn:hover{background:#2A2278}
+.gen-btn:disabled{background:var(--color-background-secondary);color:var(--color-text-secondary);cursor:not-allowed}
+
+/* states */
+.state-empty,.state-loading{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:10px;color:var(--color-text-secondary);padding:24px;min-height:300px}
+.state-empty i{font-size:36px;opacity:.2}
+.state-empty p{font-size:13px}.state-empty small{font-size:11px;opacity:.7;text-align:center}
+.spin{animation:sp 1s linear infinite;display:inline-block}
+@keyframes sp{to{transform:rotate(360deg)}}
+.ls-steps{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.ls{font-size:11px;display:flex;align-items:center;gap:6px;opacity:.3;transition:all .3s}
+.ls.on{opacity:1;color:#7F77DD}.ls.done{opacity:.55}
+
+/* output */
+.out-scroll{flex:1;padding:15px;overflow:auto;display:none}
+.out-scroll.show{display:block}
+
+/* phone + info */
+.top-row{display:flex;gap:14px;margin-bottom:14px;align-items:flex-start}
+.phone-mock{width:140px;flex-shrink:0;background:#0a0a0a;border-radius:18px;border:2px solid #222;overflow:hidden;position:relative}
+.phone-screen{height:220px;background:linear-gradient(180deg,#1a1a2e 0%,#16213e 50%,#0f3460 100%);position:relative;display:flex;flex-direction:column;justify-content:flex-end;padding:10px 8px}
+.phone-overlay{position:absolute;inset:0;display:flex;flex-direction:column;justify-content:center;align-items:center}
+.phone-play{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,.15);display:flex;align-items:center;justify-content:center;backdrop-filter:blur(4px)}
+.phone-play i{font-size:16px;color:#fff}
+.phone-caption{font-size:10px;color:rgba(255,255,255,.9);line-height:1.5;position:relative;z-index:1;margin-bottom:4px}
+.phone-user{font-size:9px;color:rgba(255,255,255,.5);display:flex;align-items:center;gap:3px}
+.phone-side{position:absolute;right:6px;bottom:30px;display:flex;flex-direction:column;gap:10px;align-items:center}
+.phone-side-btn{display:flex;flex-direction:column;align-items:center;gap:2px}
+.phone-side-btn i{font-size:14px;color:rgba(255,255,255,.8)}
+.phone-side-btn span{font-size:8px;color:rgba(255,255,255,.5)}
+.phone-bottom{height:24px;background:#0a0a0a;display:flex;align-items:center;justify-content:center}
+.phone-indicator{width:40px;height:3px;background:#333;border-radius:2px}
+.phone-prog{position:absolute;bottom:24px;left:0;right:0;height:2px;background:rgba(255,255,255,.15)}
+.phone-prog-fill{height:100%;width:35%;background:#fff;border-radius:1px}
+
+.script-meta{flex:1;display:flex;flex-direction:column;gap:8px}
+.meta-row{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.meta-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:8px 10px}
+.meta-label{font-size:10px;color:var(--color-text-secondary);margin-bottom:3px}
+.meta-value{font-size:12px;font-weight:500;color:var(--color-text-primary)}
+.meta-value.v{color:#3C3289}
+
+/* script sections */
+.script-section{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);margin-bottom:10px;overflow:hidden}
+.ss-header{padding:11px 14px;display:flex;align-items:center;justify-content:space-between;border-bottom:0.5px solid var(--color-border-tertiary)}
+.ss-left{display:flex;align-items:center;gap:8px}
+.ss-num{width:22px;height:22px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:500;flex-shrink:0}
+.ss-title{font-size:12px;font-weight:500}
+.ss-badge{font-size:10px;padding:2px 7px;border-radius:10px;font-weight:500}
+.ss-actions{display:flex;gap:5px}
+.act-btn{font-size:11px;padding:4px 9px;border-radius:6px;cursor:pointer;border:0.5px solid var(--color-border-secondary);background:var(--color-background-secondary);color:var(--color-text-secondary);transition:all .15s;font-family:var(--font-sans);display:flex;align-items:center;gap:3px}
+.act-btn:hover{background:#EEEDFE;color:#3C3289;border-color:#7F77DD}
+
+.ss-body{padding:12px 14px}
+.script-textarea{width:100%;font-size:12px;line-height:1.9;border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-md);padding:10px 12px;background:var(--color-background-secondary);color:var(--color-text-primary);resize:none;font-family:var(--font-sans)}
+.script-textarea:focus{outline:none;border-color:#7F77DD;background:var(--color-background-primary)}
+.ss-footer{display:flex;justify-content:space-between;margin-top:6px;font-size:10px;color:var(--color-text-secondary)}
+
+/* shot guide */
+.shot-row{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.shot-tag{font-size:10px;padding:3px 9px;border-radius:10px;background:#EEEDFE;color:#3C3289;border:0.5px solid #B8B4F0;display:flex;align-items:center;gap:3px}
+.shot-tag i{font-size:10px}
+
+/* bgm */
+.bgm-card{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 14px;margin-bottom:10px}
+.bgm-hd{font-size:12px;font-weight:500;margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.bgm-list{display:flex;flex-direction:column;gap:6px}
+.bgm-item{display:flex;align-items:center;gap:8px;padding:7px 10px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)}
+.bgm-icon{width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.bgm-icon i{font-size:13px;color:#3C3289}
+.bgm-info{flex:1}
+.bgm-name{font-size:11px;font-weight:500}
+.bgm-style{font-size:10px;color:var(--color-text-secondary)}
+.bgm-rec{font-size:10px;padding:2px 7px;border-radius:10px;background:#EAF3DE;color:#27500A;flex-shrink:0}
+
+/* publish tips */
+.pub-section{background:var(--color-background-primary);border:0.5px solid var(--color-border-tertiary);border-radius:var(--border-radius-lg);padding:12px 14px;margin-bottom:10px}
+.pub-hd{font-size:12px;font-weight:500;margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.pub-grid{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.pub-item{background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:8px 10px}
+.pub-label{font-size:10px;color:var(--color-text-secondary);margin-bottom:3px}
+.pub-value{font-size:12px;font-weight:500}
+
+.bottom-bar{background:var(--color-background-primary);border-top:0.5px solid var(--color-border-tertiary);padding:11px 15px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;flex-shrink:0}
+.bb-left{font-size:11px;color:var(--color-text-secondary)}
+.bb-right{display:flex;gap:7px}
+.btn{padding:7px 13px;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;font-family:var(--font-sans);border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-primary);display:inline-flex;align-items:center;gap:5px;transition:all .15s}
+.btn:hover{background:var(--color-background-secondary)}
+.bp{background:#3C3289;color:#fff;border-color:#3C3289}
+.bp:hover{background:#2A2278}
+</style>
+
+<div class="page">
+<div class="page-hd">
+  <div>
+    <div class="page-title"><i class="ti ti-brand-tiktok" aria-hidden="true"></i>抖音口播脚本</div>
+    <div class="page-sub">钩子开场 · 口播正文 · 行动指令，三段式专业脚本 + 镜头提示 + BGM 建议</div>
+  </div>
+  <div class="pills">
+    <div class="cost-pill">消耗 3 积分 / 次</div>
+    <div class="credits-pill"><i class="ti ti-bolt" style="font-size:13px" aria-hidden="true"></i><span id="credits-num">1,237</span> 积分</div>
+  </div>
+</div>
+
+<div class="body">
+<!-- 左侧 -->
+<div class="left">
+  <div class="ctx-card">
+    <div class="ctx-title">今日上下文</div>
+    <div class="ctx-row"><span class="ctx-k"><i class="ti ti-building" style="font-size:11px" aria-hidden="true"></i>酒店</span><span class="ctx-v">松间·山野民宿</span></div>
+    <div class="ctx-row"><span class="ctx-k"><i class="ti ti-cloud-rain" style="font-size:11px" aria-hidden="true"></i>天气</span><span class="ctx-v">小雨 · 19°C</span></div>
+    <div class="ctx-row"><span class="ctx-k"><i class="ti ti-calendar" style="font-size:11px" aria-hidden="true"></i>今日</span><span class="ctx-v">周四</span></div>
+    <div class="ctx-row"><span class="ctx-k"><i class="ti ti-confetti" style="font-size:11px" aria-hidden="true"></i>节点</span><span class="ctx-v o">距端午 3 天</span></div>
+    <div class="ctx-row"><span class="ctx-k"><i class="ti ti-layout-grid" style="font-size:11px" aria-hidden="true"></i>出租率</span><span class="ctx-v g">75% · 空余 2 间</span></div>
+  </div>
+
+  <div>
+    <div class="fl">视频时长</div>
+    <div class="dur-row" id="dur-row">
+      <div class="dur-chip" data-val="15">⚡ 15秒<div style="font-size:9px;opacity:.7;margin-top:2px">快节奏</div></div>
+      <div class="dur-chip on" data-val="30">🎯 30秒<div style="font-size:9px;opacity:.7;margin-top:2px">推荐</div></div>
+      <div class="dur-chip" data-val="60">📖 60秒<div style="font-size:9px;opacity:.7;margin-top:2px">完整版</div></div>
+    </div>
+  </div>
+
+  <div>
+    <div class="fl" style="margin-bottom:6px">内容类型</div>
+    <div class="type-col" id="type-col">
+      <div class="type-chip on" data-val="情绪种草">
+        <div class="type-name">🌿 情绪种草</div>
+        <div class="type-desc">景色+感受，唤起向往</div>
+      </div>
+      <div class="type-chip" data-val="稀缺促单">
+        <div class="type-name">⚡ 稀缺促单</div>
+        <div class="type-desc">仅剩X间，制造紧迫</div>
+      </div>
+      <div class="type-chip" data-val="节日氛围">
+        <div class="type-name">🎋 节日氛围</div>
+        <div class="type-desc">端午主题，节日借势</div>
+      </div>
+      <div class="type-chip" data-val="探店vlog">
+        <div class="type-name">📹 探店vlog</div>
+        <div class="type-desc">带镜头旁白，真实感强</div>
+      </div>
+      <div class="type-chip" data-val="问题钩子">
+        <div class="type-name">❓ 问题钩子</div>
+        <div class="type-desc">提问开场，引发好奇</div>
+      </div>
+    </div>
+  </div>
+
+  <div>
+    <div class="fl">口播语气</div>
+    <select id="sel-voice">
+      <option value="casual">亲切随性（像朋友聊天）</option>
+      <option value="warm">温暖治愈（情绪价值型）</option>
+      <option value="urgent">紧迫感强（促销转化型）</option>
+      <option value="poetic">文艺诗意（高端调性）</option>
+    </select>
+  </div>
+
+  <div>
+    <div class="fl">额外信息 <span style="font-weight:400;opacity:.7">（选填）</span></div>
+    <textarea id="inp-note" rows="2" placeholder="今天竹林有薄雾、刚好有客人打卡出了好照片、还有2间特价..."></textarea>
+  </div>
+
+  <div class="tip tip-v">
+    <strong>🎬 抖音算法提示：</strong>前 3 秒留人率决定推流量级；结尾必须有明确行动指令（私信/评论/点击主页）；18:00–22:00 是最佳发布窗口。
+  </div>
+
+  <button class="gen-btn" id="gen-btn" onclick="generate()">
+    <i class="ti ti-sparkles" aria-hidden="true"></i>AI 生成口播脚本
+  </button>
+</div>
+
+<!-- 右侧 -->
+<div class="right">
+  <div class="state-empty" id="st-empty">
+    <i class="ti ti-brand-tiktok" aria-hidden="true"></i>
+    <p>选择类型后点击生成</p>
+    <small>AI 将生成完整三段式脚本<br>含镜头提示、BGM 建议和发布策略</small>
+  </div>
+
+  <div class="state-loading" id="st-loading" style="display:none">
+    <i class="ti ti-loader spin" style="font-size:28px;color:#7F77DD" aria-hidden="true"></i>
+    <div class="ls-steps">
+      <div class="ls" id="ls1"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>分析今日天气与节假日节点</div>
+      <div class="ls" id="ls2"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>设计前3秒高留人率钩子</div>
+      <div class="ls" id="ls3"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>撰写口播正文与镜头指引</div>
+      <div class="ls" id="ls4"><i class="ti ti-check" style="font-size:11px" aria-hidden="true"></i>生成BGM建议与发布策略</div>
+    </div>
+  </div>
+
+  <div class="out-scroll" id="st-out">
+
+    <!-- 手机预览 + 元信息 -->
+    <div class="top-row">
+      <div class="phone-mock">
+        <div class="phone-screen">
+          <div class="phone-overlay">
+            <div class="phone-play"><i class="ti ti-player-play-filled" aria-hidden="true"></i></div>
+          </div>
+          <div class="phone-prog"><div class="phone-prog-fill"></div></div>
+          <div class="phone-caption" id="phone-caption">脚本预览...</div>
+          <div class="phone-user"><i class="ti ti-building" style="font-size:9px" aria-hidden="true"></i>松间·山野民宿</div>
+          <div class="phone-side">
+            <div class="phone-side-btn"><i class="ti ti-heart" aria-hidden="true"></i><span>3.2k</span></div>
+            <div class="phone-side-btn"><i class="ti ti-message-circle" aria-hidden="true"></i><span>218</span></div>
+            <div class="phone-side-btn"><i class="ti ti-share" aria-hidden="true"></i><span>转发</span></div>
+          </div>
+        </div>
+        <div class="phone-bottom"><div class="phone-indicator"></div></div>
+      </div>
+
+      <div class="script-meta">
+        <div class="meta-row">
+          <div class="meta-card"><div class="meta-label">预计时长</div><div class="meta-value v" id="meta-dur">30 秒</div></div>
+          <div class="meta-card"><div class="meta-label">字数参考</div><div class="meta-value" id="meta-words">约 150 字</div></div>
+          <div class="meta-card"><div class="meta-label">内容类型</div><div class="meta-value" id="meta-type">情绪种草</div></div>
+          <div class="meta-card"><div class="meta-label">推荐发布</div><div class="meta-value v">今日 20:00</div></div>
+        </div>
+        <div class="tip tip-o" style="margin-bottom:0" id="meta-tip">雨天竹林 + 端午节点双重加持，今日发布情绪共鸣类内容，预计完播率高于平均水平。</div>
+      </div>
+    </div>
+
+    <!-- 第一段：钩子 -->
+    <div class="script-section">
+      <div class="ss-header">
+        <div class="ss-left">
+          <div class="ss-num" style="background:#EEEDFE;color:#3C3289">01</div>
+          <div class="ss-title">开场钩子</div>
+          <span class="ss-badge" style="background:#EEEDFE;color:#3C3289">前 3 秒 · 决定留人率</span>
+        </div>
+        <div class="ss-actions">
+          <button class="act-btn" onclick="regenSection('hook')"><i class="ti ti-refresh" style="font-size:11px" aria-hidden="true"></i>换一版</button>
+          <button class="act-btn" onclick="copySection('hook')"><i class="ti ti-copy" style="font-size:11px" aria-hidden="true"></i>复制</button>
+        </div>
+      </div>
+      <div class="ss-body">
+        <div class="shot-row" id="shot-hook"></div>
+        <textarea class="script-textarea" id="txt-hook" rows="3" oninput="updatePhone()"></textarea>
+        <div class="ss-footer">
+          <span id="cnt-hook">0 字</span>
+          <span>建议 15-25 字，强反差或疑问句效果最佳</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第二段：正文 -->
+    <div class="script-section">
+      <div class="ss-header">
+        <div class="ss-left">
+          <div class="ss-num" style="background:#E6F1FB;color:#185FA5">02</div>
+          <div class="ss-title">口播正文</div>
+          <span class="ss-badge" style="background:#E6F1FB;color:#185FA5">核心内容 · 场景+情绪</span>
+        </div>
+        <div class="ss-actions">
+          <button class="act-btn" onclick="regenSection('body')"><i class="ti ti-refresh" style="font-size:11px" aria-hidden="true"></i>换一版</button>
+          <button class="act-btn" onclick="copySection('body')"><i class="ti ti-copy" style="font-size:11px" aria-hidden="true"></i>复制</button>
+        </div>
+      </div>
+      <div class="ss-body">
+        <div class="shot-row" id="shot-body"></div>
+        <textarea class="script-textarea" id="txt-body" rows="5" oninput="updateBodyCount()"></textarea>
+        <div class="ss-footer">
+          <span id="cnt-body">0 字</span>
+          <span>自然口语化，有节奏感，避免背诵感</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- 第三段：行动指令 -->
+    <div class="script-section">
+      <div class="ss-header">
+        <div class="ss-left">
+          <div class="ss-num" style="background:#EAF3DE;color:#27500A">03</div>
+          <div class="ss-title">结尾行动指令</div>
+          <span class="ss-badge" style="background:#EAF3DE;color:#27500A">CTA · 引导互动转化</span>
+        </div>
+        <div class="ss-actions">
+          <button class="act-btn" onclick="regenSection('cta')"><i class="ti ti-refresh" style="font-size:11px" aria-hidden="true"></i>换一版</button>
+          <button class="act-btn" onclick="copySection('cta')"><i class="ti ti-copy" style="font-size:11px" aria-hidden="true"></i>复制</button>
+        </div>
+      </div>
+      <div class="ss-body">
+        <div class="shot-row" id="shot-cta"></div>
+        <textarea class="script-textarea" id="txt-cta" rows="3"></textarea>
+        <div class="ss-footer">
+          <span id="cnt-cta">0 字</span>
+          <span>必须有明确动作：私信/评论/点击主页</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- BGM建议 -->
+    <div class="bgm-card">
+      <div class="bgm-hd"><i class="ti ti-music" style="color:#3C3289;font-size:14px" aria-hidden="true"></i>BGM 方向建议</div>
+      <div class="bgm-list" id="bgm-list">
+        <div class="bgm-item">
+          <div class="bgm-icon"><i class="ti ti-music" aria-hidden="true"></i></div>
+          <div class="bgm-info"><div class="bgm-name">生成中...</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 发布策略 -->
+    <div class="pub-section">
+      <div class="pub-hd"><i class="ti ti-rocket" style="color:#3C3289;font-size:14px" aria-hidden="true"></i>发布策略建议</div>
+      <div class="pub-grid" id="pub-grid">
+        <div class="pub-item"><div class="pub-label">最佳发布时间</div><div class="pub-value">今日 20:00</div></div>
+        <div class="pub-item"><div class="pub-label">封面设计</div><div class="pub-value" id="pub-cover">竹林雨景大字幕</div></div>
+        <div class="pub-item"><div class="pub-label">评论区置顶</div><div class="pub-value" id="pub-comment">预订方式+联系方式</div></div>
+        <div class="pub-item"><div class="pub-label">预期完播率</div><div class="pub-value" style="color:#3C3289">⭐⭐⭐⭐</div></div>
+      </div>
+    </div>
+
+    <div class="bottom-bar">
+      <div class="bb-left">完整脚本已生成 · 可直接编辑后录制</div>
+      <div class="bb-right">
+        <button class="btn" onclick="copyFull()"><i class="ti ti-copy" aria-hidden="true"></i>复制完整脚本</button>
+        <button class="btn bp" onclick="generate()"><i class="ti ti-refresh" aria-hidden="true"></i>重新生成</button>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+
+<script>
+const HOTEL={
+  name:'松间·山野民宿',type:'精品民宿',location:'浙江·莫干山',
+  features:'竹林景观、私汤温泉、无边泳池、有机早餐',
+  target:'面向长三角城市中产，主打情侣度假与亲子出行',
+  nearby:'距莫干山景区5分钟，竹林徒步、茶园采摘',
+  weather:'小雨，19°C',day:'周四',holiday:'距端午节还有3天',
+  occ:75,sold:9,free:2,total:12
+};
+let credits=1237;
+let lastScript={hook:'',body:'',cta:'',bgm:[],shots:{hook:[],body:[],cta:[]}};
+
+// dur chips — single
+document.querySelectorAll('.dur-chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    document.querySelectorAll('.dur-chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+    updateMeta();
+  });
+});
+// type chips — single
+document.querySelectorAll('.type-chip').forEach(c=>{
+  c.addEventListener('click',()=>{
+    document.querySelectorAll('.type-chip').forEach(x=>x.classList.remove('on'));
+    c.classList.add('on');
+  });
+});
+
+function getDur(){return document.querySelector('.dur-chip.on')?.dataset.val||'30';}
+function getType(){return document.querySelector('.type-chip.on')?.dataset.val||'情绪种草';}
+function getVoice(){return document.getElementById('sel-voice').value;}
+function getNote(){return document.getElementById('inp-note').value.trim();}
+
+function updateMeta(){
+  const dur=getDur();
+  const wordMap={'15':'约75字','30':'约150字','60':'约300字'};
+  document.getElementById('meta-dur').textContent=dur+' 秒';
+  document.getElementById('meta-words').textContent=wordMap[dur]||'约150字';
+}
+
+function buildPrompt(){
+  const dur=getDur(), type=getType(), note=getNote();
+  const voiceMap={casual:'亲切随性（像朋友聊天）',warm:'温暖治愈',urgent:'紧迫感强（促销转化）',poetic:'文艺诗意'};
+  const voice=voiceMap[getVoice()]||'亲切随性';
+  const wordTarget={'15':75,'30':150,'60':300}[dur]||150;
+  return `你是${HOTEL.name}的抖音内容创作者，请生成一段专业的口播脚本。
+
+【酒店信息】
+名称：${HOTEL.name}（${HOTEL.type}）| 位置：${HOTEL.location}
+核心特色：${HOTEL.features} | 周边：${HOTEL.nearby}
+
+【今日实时数据】
+天气：${HOTEL.weather} | ${HOTEL.day} | ${HOTEL.holiday}
+出租率：${HOTEL.occ}%，空余${HOTEL.free}间
+
+【脚本要求】
+视频时长：${dur}秒（总字数约${wordTarget}字）
+内容类型：${type}
+口播语气：${voice}
+${note?'额外信息：'+note:''}
+
+【严格按以下格式输出】
+
+[钩子]
+镜头：（1句话描述开场画面，如：推开竹林小径，雨滴打在竹叶上）
+台词：（前3秒口播内容，15-25字，强反差或疑问句，必须让人停止划走）
+
+[正文]
+镜头：（2-3个场景描述，用"→"分隔）
+台词：（核心口播内容，自然口语，有节奏感，植入酒店特色和今日上下文）
+
+[行动指令]
+镜头：（结尾画面描述）
+台词：（明确的行动号召，私信/评论/点击主页，20字以内，有力收尾）
+
+[BGM建议]
+1. （BGM风格名称）：（一句话说明为何适合）
+2. （BGM风格名称）：（一句话说明为何适合）
+3. （BGM风格名称）：（一句话说明为何适合）`;
+}
+
+function parseScript(text){
+  const r={hook:'',hookShot:'',body:'',bodyShot:'',cta:'',ctaShot:'',bgm:[]};
+  const hook=text.match(/\[钩子\]([\s\S]*?)(?=\[正文\])/);
+  const body=text.match(/\[正文\]([\s\S]*?)(?=\[行动指令\])/);
+  const cta=text.match(/\[行动指令\]([\s\S]*?)(?=\[BGM建议\])/);
+  const bgm=text.match(/\[BGM建议\]([\s\S]*?)$/);
+  if(hook){
+    const s=hook[1].match(/镜头：(.+)/);const t=hook[1].match(/台词：([\s\S]*?)$/);
+    if(s)r.hookShot=s[1].trim();if(t)r.hook=t[1].trim();
+  }
+  if(body){
+    const s=body[1].match(/镜头：(.+)/);const t=body[1].match(/台词：([\s\S]*?)$/);
+    if(s)r.bodyShot=s[1].trim();if(t)r.body=t[1].trim();
+  }
+  if(cta){
+    const s=cta[1].match(/镜头：(.+)/);const t=cta[1].match(/台词：([\s\S]*?)$/);
+    if(s)r.ctaShot=s[1].trim();if(t)r.cta=t[1].trim();
+  }
+  if(bgm){
+    r.bgm=bgm[1].trim().split('\n').filter(l=>l.trim()&&/^\d/.test(l.trim())).slice(0,3).map(l=>l.replace(/^\d+\.\s*/,'').trim());
+  }
+  return r;
+}
+
+function renderShots(id,shotText){
+  const el=document.getElementById(id);
+  if(!el||!shotText)return;
+  const shots=shotText.split('→').map(s=>s.trim()).filter(s=>s);
+  el.innerHTML=shots.map(s=>`<span class="shot-tag"><i class="ti ti-video" aria-hidden="true"></i>${s}</span>`).join('');
+}
+
+function renderBGM(bgmArr){
+  const list=document.getElementById('bgm-list');
+  if(!bgmArr||!bgmArr.length){list.innerHTML='';return;}
+  const icons=['ti-music','ti-vinyl','ti-guitar'];
+  list.innerHTML=bgmArr.map((b,i)=>{
+    const [name,...rest]=b.split('：');
+    return`<div class="bgm-item">
+      <div class="bgm-icon"><i class="ti ${icons[i]||'ti-music'}" aria-hidden="true"></i></div>
+      <div class="bgm-info">
+        <div class="bgm-name">${name||b}</div>
+        <div class="bgm-style">${rest.join('：')||''}</div>
+      </div>
+      ${i===0?'<span class="bgm-rec">推荐</span>':''}
+    </div>`;
+  }).join('');
+}
+
+function updatePhone(){
+  const hook=document.getElementById('txt-hook').value;
+  document.getElementById('phone-caption').textContent=hook?hook.substring(0,40)+'...':(lastScript.hook||'脚本预览...');
+  countAll();
+}
+function updateBodyCount(){countAll();}
+function countAll(){
+  ['hook','body','cta'].forEach(k=>{
+    const t=document.getElementById('txt-'+k);
+    const c=document.getElementById('cnt-'+k);
+    if(t&&c)c.textContent=t.value.length+' 字';
+  });
+}
+
+let lsTimer=null;
+function startLS(){
+  ['ls1','ls2','ls3','ls4'].forEach(id=>{const e=document.getElementById(id);if(e){e.classList.remove('on','done');}});
+  let i=0;const ids=['ls1','ls2','ls3','ls4'];
+  lsTimer=setInterval(()=>{
+    if(i>0){const p=document.getElementById(ids[i-1]);if(p){p.classList.remove('on');p.classList.add('done');}}
+    if(i<ids.length){const c=document.getElementById(ids[i]);if(c)c.classList.add('on');i++;}
+    else clearInterval(lsTimer);
+  },700);
+}
+
+async function generate(){
+  if(credits<3){alert('算力不足，请充值后继续');return;}
+  document.getElementById('st-empty').style.display='none';
+  document.getElementById('st-out').classList.remove('show');
+  document.getElementById('st-loading').style.display='flex';
+  document.getElementById('gen-btn').disabled=true;
+  startLS();
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1200,messages:[{role:'user',content:buildPrompt()}]})
+    });
+    const data=await resp.json();
+    clearInterval(lsTimer);
+    const text=data.content&&data.content[0]?data.content[0].text:'';
+    const parsed=parseScript(text);
+    lastScript=parsed;
+    credits-=3;
+    document.getElementById('credits-num').textContent=credits.toLocaleString();
+    // fill
+    document.getElementById('txt-hook').value=parsed.hook;
+    document.getElementById('txt-body').value=parsed.body;
+    document.getElementById('txt-cta').value=parsed.cta;
+    renderShots('shot-hook',parsed.hookShot);
+    renderShots('shot-body',parsed.bodyShot);
+    renderShots('shot-cta',parsed.ctaShot);
+    renderBGM(parsed.bgm);
+    updatePhone();
+    countAll();
+    // meta
+    document.getElementById('meta-type').textContent=getType();
+    updateMeta();
+    // pub
+    const type=getType();
+    document.getElementById('pub-cover').textContent=type==='稀缺促单'?'大字幕「仅剩X间」':type==='节日氛围'?'端午主题画面+文字':type==='探店vlog'?'第一视角进门画面':'竹林雨景+大字幕';
+    document.getElementById('pub-comment').textContent=type==='稀缺促单'?'当前价格+私信预订入口':'预订方式+联系方式';
+    // tip
+    const t=document.getElementById('meta-tip');
+    t.textContent=type==='情绪种草'?'🌧️ 雨天情绪类内容共鸣感强，今日发布完播率预计高于平均20%。':
+      type==='稀缺促单'?'⚡ 结合端午倒计时制造紧迫感，转化效果最佳，建议今日20:00发。':
+      type==='节日氛围'?'🎋 端午前3天是节日内容黄金发布窗口，卡时机发布覆盖人群最广。':
+      '📹 探店类内容真实感强，完播率高，适合作为账号积累基础内容。';
+    document.getElementById('st-loading').style.display='none';
+    document.getElementById('st-out').classList.add('show');
+  }catch(e){
+    clearInterval(lsTimer);
+    document.getElementById('st-loading').style.display='none';
+    document.getElementById('st-empty').style.display='flex';
+    document.getElementById('st-empty').querySelector('p').textContent='生成失败，请检查网络后重试';
+  }
+  document.getElementById('gen-btn').disabled=false;
+}
+
+async function regenSection(section){
+  const btn=event.target.closest('button');
+  const orig=btn.innerHTML;
+  btn.innerHTML='<i class="ti ti-loader" style="font-size:11px;animation:sp 1s linear infinite;display:inline-block"></i>';
+  btn.disabled=true;
+  const sectionName={hook:'开场钩子（前3秒）',body:'口播正文',cta:'结尾行动指令'}[section];
+  const dur=getDur(), type=getType();
+  try{
+    const resp=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:300,messages:[{role:'user',content:`为${HOTEL.name}重新生成一版抖音口播脚本的「${sectionName}」部分。
+视频${dur}秒，类型：${type}，天气：${HOTEL.weather}，节点：${HOTEL.holiday}，空余${HOTEL.free}间。
+按格式输出：\n镜头：（画面描述）\n台词：（口播内容）`}]})
+    });
+    const data=await resp.json();
+    if(data.content&&data.content[0]){
+      const text=data.content[0].text.trim();
+      const shotMatch=text.match(/镜头：(.+)/);
+      const tMatch=text.match(/台词：([\s\S]*?)$/);
+      if(tMatch){document.getElementById('txt-'+section).value=tMatch[1].trim();}
+      if(shotMatch){renderShots('shot-'+section,shotMatch[1].trim());}
+      countAll();if(section==='hook')updatePhone();
+    }
+  }catch(e){}
+  btn.innerHTML=orig;btn.disabled=false;
+}
+
+function copySection(section){
+  const el=document.getElementById('txt-'+section);
+  if(!el)return;
+  navigator.clipboard.writeText(el.value).then(()=>{
+    const btn=event.target.closest('button');
+    const orig=btn.innerHTML;
+    btn.innerHTML='<i class="ti ti-check" style="font-size:11px"></i> 已复制';
+    setTimeout(()=>btn.innerHTML=orig,1500);
+  }).catch(()=>{});
+}
+
+function copyFull(){
+  const hook=document.getElementById('txt-hook').value;
+  const body=document.getElementById('txt-body').value;
+  const cta=document.getElementById('txt-cta').value;
+  const full=`【开场钩子】\n${hook}\n\n【口播正文】\n${body}\n\n【结尾行动指令】\n${cta}`;
+  navigator.clipboard.writeText(full).then(()=>{
+    const btn=event.target.closest('button');
+    const orig=btn.innerHTML;
+    btn.innerHTML='<i class="ti ti-check"></i> 已复制完整脚本';
+    setTimeout(()=>btn.innerHTML=orig,1800);
+  }).catch(()=>{});
+}
+</script>
