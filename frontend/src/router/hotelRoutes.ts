@@ -1,0 +1,32 @@
+import type { RouteRecordRaw } from 'vue-router'
+import DashboardView from '@/views/operations/DashboardView.vue'
+
+export const hotelRoutes: RouteRecordRaw[] = [
+  { path: '/login', name: 'login', component: () => import('@/views/auth/LoginView.vue') },
+  { path: '/setup', name: 'setup', component: () => import('@/views/setup/SetupView.vue') },
+  { path: '/setup/occupancy-history', name: 'occupancyHistory', component: () => import('@/views/setup/OccupancyHistoryView.vue') },
+  { path: '/rooms', name: 'rooms', component: () => import('@/views/setup/RoomsView.vue') },
+  { path: '/dashboard', name: 'dashboard', component: DashboardView },
+  { path: '/pricing', name: 'pricing', component: () => import('@/views/operations/PricingView.vue') },
+  { path: '/pricing/result', name: 'pricingResult', component: () => import('@/views/operations/PricingResultView.vue') },
+  { path: '/strategy', name: 'strategy', component: () => import('@/views/operations/StrategyView.vue') },
+  { path: '/strategy/result', name: 'strategyResult', component: () => import('@/views/operations/StrategyResultView.vue') },
+  { path: '/plans', name: 'plans', redirect: '/history/strategy' },
+  { path: '/plan', name: 'plan', component: () => import('@/views/operations/PlanView.vue') },
+  { path: '/create', name: 'create', component: () => import('@/views/content/CreateCenterView.vue') },
+  { path: '/wechat', name: 'wechat', component: () => import('@/views/content/WechatView.vue') },
+  { path: '/xhs', name: 'xhs', component: () => import('@/views/content/XhsView.vue') },
+  { path: '/poster', name: 'poster', component: () => import('@/views/content/PosterView.vue') },
+  { path: '/video', name: 'video', component: () => import('@/views/content/VideoView.vue') },
+  { path: '/article', name: 'article', component: () => import('@/views/content/ArticleView.vue') },
+  { path: '/review', name: 'review', component: () => import('@/views/reputation/ReviewView.vue') },
+  { path: '/reply', name: 'reply', component: () => import('@/views/reputation/ReplyView.vue') },
+  { path: '/brain', name: 'brain', component: () => import('@/views/operations/BrainView.vue') },
+  { path: '/knowledge', name: 'knowledge', component: () => import('@/views/knowledge/KnowledgeCenterView.vue') },
+  { path: '/knowledge/library', name: 'knowledgeLibrary', component: () => import('@/views/knowledge/KnowledgeLibraryView.vue') },
+  { path: '/history', name: 'history', component: () => import('@/views/content/HistoryView.vue') },
+  { path: '/history/:moduleKey/:id', name: 'generationDetail', component: () => import('@/views/content/GenerationDetailView.vue') },
+  { path: '/history/:moduleKey', name: 'moduleHistory', component: () => import('@/views/content/ModuleHistoryListView.vue') },
+  { path: '/credits', name: 'credits', component: () => import('@/views/account/CreditsView.vue') },
+  { path: '/profile', name: 'profile', component: () => import('@/views/account/ProfileView.vue') },
+]

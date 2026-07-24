@@ -2,7 +2,7 @@
 
 InnSight AI 是一套面向酒店、民宿和度假门店的 AI 运营工作台。项目围绕酒店日常经营中的内容发布、房态分析、智能定价、营销策略、知识沉淀和平台管理等场景，将 AI 生成能力和酒店基础数据结合，帮助中小酒店团队提升运营效率。
 
-本仓库保留项目核心代码：Vue 3 前端、Spring Boot 多模块后端，以及 MySQL 初始化 SQL。
+本仓库保留项目核心代码：Vue 3 前端、Spring Boot 多模块后端，以及 MySQL 初始化 SQL。项目按前后端分层组织，便于独立开发、维护和部署。
 
 ## 功能模块
 
@@ -54,15 +54,26 @@ InnSight AI 是一套面向酒店、民宿和度假门店的 AI 运营工作台�
 
 ```text
 InnSight-AI/
-├── public/                         # 前端静态资源
-├── src/                            # Vue 前端源码
-│   ├── api/                        # API 请求封装
-│   ├── components/                 # 公共组件
-│   ├── router/                     # 前端路由
-│   ├── stores/                     # Pinia 状态管理
-│   ├── utils/                      # 内容解析、导出、渲染等工具函数
-│   └── views/                      # 业务页面和管理端页面
-├── sushijia-server/                # Spring Boot 后端源码
+├── frontend/                       # Vue 前端项目
+│   ├── public/                     # 静态资源
+│   ├── src/
+│   │   ├── api/                    # API 请求封装
+│   │   ├── components/             # 公共组件
+│   │   ├── router/                 # 前端路由
+│   │   ├── stores/                 # Pinia 状态管理
+│   │   ├── utils/                  # 内容解析、导出、渲染等工具函数
+│   │   └── views/                  # 页面模块
+│   │       ├── account/            # 账户与算力页面
+│   │       ├── admin/              # 管理端页面
+│   │       ├── auth/               # 登录认证页面
+│   │       ├── content/            # 内容生产与历史页面
+│   │       ├── knowledge/          # 知识库页面
+│   │       ├── operations/         # 经营、定价、策略页面
+│   │       ├── reputation/         # 好评引导与点评回复页面
+│   │       └── setup/              # 初始化配置与房型页面
+│   ├── package.json                # 前端依赖与脚本
+│   └── vite.config.ts              # Vite 配置
+├── backend/                        # Spring Boot 后端项目
 │   ├── sql/init.sql                # MySQL 初始化脚本
 │   ├── sushijia-admin/             # 管理端服务模块
 │   ├── sushijia-ai/                # AI 调用与模型服务模块
@@ -70,8 +81,7 @@ InnSight-AI/
 │   ├── sushijia-framework/         # 安全、租户、审计等框架能力
 │   ├── sushijia-hotel/             # 酒店端业务接口
 │   └── sushijia-repository/        # 实体类与 MyBatis Mapper
-├── package.json                    # 前端依赖与脚本
-├── vite.config.ts                  # Vite 配置
+├── .gitignore
 └── README.md
 ```
 
@@ -80,6 +90,7 @@ InnSight-AI/
 安装前端依赖：
 
 ```bash
+cd frontend
 npm install
 ```
 
@@ -98,13 +109,12 @@ npm run build
 数据库初始化脚本：
 
 ```text
-sushijia-server/sql/init.sql
+backend/sql/init.sql
 ```
 
 后端构建：
 
 ```bash
-cd sushijia-server
+cd backend
 mvn clean package
 ```
-
