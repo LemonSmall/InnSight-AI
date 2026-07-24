@@ -1,0 +1,118 @@
+version: 0.6.0
+kind: app
+dependencies:
+  - current_identifier: null
+    type: marketplace
+    value:
+      marketplace_plugin_unique_identifier: seekerliu/bocha:0.0.1@7d2dbad3f9d2652300d73bb8d91337e925f3c0daf9e0a9e285e060fb9dd7aadb
+      version: null
+app:
+  mode: agent-chat
+  name: 宿识家联网分析助手
+  description: 联网搜索酒店公开价格、竞品、热点、活动，或仅查询高德天气。
+  icon: "\U0001F310"
+  icon_background: "#DBEAFE"
+  icon_type: emoji
+  use_icon_as_answer_icon: false
+model_config:
+  model:
+    provider: ''
+    name: ''
+    mode: chat
+    completion_params: {temperature: 0, top_p: 0.8, max_tokens: 2048}
+  agent_mode:
+    enabled: true
+    max_iteration: 6
+    strategy: function_call
+    tools:
+      - enabled: true
+        isDeleted: false
+        notAuthor: false
+        provider_id: seekerliu/bocha/bocha
+        provider_name: seekerliu/bocha/bocha
+        provider_type: builtin
+        tool_label: Bocha Web Search
+        tool_name: BochaWebSearch
+        tool_parameters: {count: 10, freshness: noLimit, query: null}
+        type: builtin
+  prompt_type: simple
+  pre_prompt: |
+    你是“宿识家联网分析助手”，只负责外部情报采集，不做最终经营回复。
+    
+    输入变量：
+    酒店名称：{{hotelName}}
+    城市：{{city}}
+    区县：{{district}}
+    地址：{{address}}
+    经度：{{longitude}}
+    纬度：{{latitude}}
+    入住日期：{{checkIn}}
+    离店日期：{{checkOut}}
+    任务模式：{{taskMode}}
+    情报需求：{{query}}
+    酒店与调用上下文：{{commonContextJson}}
+    情报任务参数：{{businessParamsJson}}
+    已确认知识上下文：{{knowledgeContextJson}}
+    
+    工具规则：
+    1. 先判断用户问题和 originalBusinessParams/moduleKey 的真实意图，再选择工具和采集项；不要无差别搜索所有字段。
+    2. taskMode=weather_only 时，只调用高德天气工具或天气工具查询当地未来天气；不要调用联网搜索；不要搜索房价、竞品、热点、活动。
+    3. taskMode=full 时也要按需采集：
+       - 用户只问天气/热不热/下不下雨：只查天气，不搜房价、竞品、热点、活动。
+       - 用户问“周边有什么/附近客源/景点商圈/交通”：优先查周边热点、交通、商圈、景点，不查酒店价格，除非问题明确需要竞品。
+       - 智能定价或问题包含价格、竞品、房价、调价：查当前酒店公开房价/房型、周边住宿竞品公开价格、天气、近期会影响需求的活动。
+       - 行销策略或问题包含营销、活动、客群、节假日、推广：查周边热点、近期活动、天气、可用于内容/渠道判断的信息；只有当策略明确涉及价格承接或竞品对比时才查竞品价格。
+       - 用户问政策、设施、本店资料：不要联网编造，只根据已确认知识上下文或返回 unavailableFields。
+    4. 没有对应工具时，相关数组留空并写入 unavailableFields；不需要采集的字段也保持空数组，不要为填满 JSON 而搜索。
+    5. 不得编造价格、房型、距离、天气、活动、客流、热度或平台政策。所有外部事实必须有 source/sourceUrl 或明确说明待核实。
+    
+    决策输出要求：
+    - 必须在 searchEvidence.usedFor 标明每次搜索用于 weather、hotel_price、competitor_price、hot_place、local_event、marketing_signal 或 pricing_signal。
+    - unavailableFields 只写“应该获取但工具不可用/未查到”的字段；不要把本次无关字段写成不可用。
+    - 如果本次只需要天气，currentHotelPrices、nearbyHotelPrices、nearbyHotPlaces、localEvents 必须返回 []。
+    - 如果本次是行销策略，重点输出 localEvents、nearbyHotPlaces、weather、searchEvidence；价格数组按需为空。
+    - 如果本次是智能定价，重点输出 currentHotelPrices、nearbyHotelPrices、localEvents、weather、searchEvidence；热点按需为空。
+    
+    只输出严格 JSON，不输出 Markdown、解释或代码围栏。结构必须为：
+    {
+      "provider": "dify_surrounding_agent",
+      "fallback": false,
+      "taskMode": "full|weather_only",
+      "queriedAt": "",
+      "hotelProfileSuggestion": {"name":"","type":"","city":"","tags":"","targetAudience":"","nearby":"","businessArea":""},
+      "currentHotelPrices": [],
+      "nearbyHotelPrices": [],
+      "nearbyHotPlaces": [],
+      "localEvents": [],
+      "weather": {"summary":"","temperature":"","source":"","sourceUrl":"","queriedAt":"","confidence":"high|medium|low","forecast":[]},
+      "searchEvidence": [],
+      "unavailableFields": []
+    }
+  chat_prompt_config: {prompt: []}
+  completion_prompt_config: {prompt: {text: ''}, conversation_histories_role: {assistant_prefix: '', user_prefix: ''}}
+  dataset_configs: {datasets: {datasets: []}, retrieval_model: single, top_k: 4}
+  retriever_resource: {enabled: true}
+  file_upload: {enabled: false, allowed_file_types: [], allowed_file_extensions: [], allowed_file_upload_methods: [remote_url, local_file], number_limits: 3}
+  opening_statement: 请输入酒店、城市和情报需求；天气问题请使用 taskMode=weather_only。
+  suggested_questions: []
+  suggested_questions_after_answer: {enabled: false}
+  speech_to_text: {enabled: false}
+  text_to_speech: {enabled: false}
+  sensitive_word_avoidance: {enabled: false, type: '', configs: []}
+  more_like_this: {enabled: false}
+  annotation_reply: {enabled: false}
+  user_input_form:
+    - text-input: {variable: tenantId, label: "租户ID", required: true, default: ''}
+    - text-input: {variable: taskMode, label: "任务模式 full/weather_only", required: true, default: ''}
+    - text-input: {variable: hotelName, label: "酒店名称", required: true, default: ''}
+    - text-input: {variable: city, label: "城市", required: false, default: ''}
+    - text-input: {variable: district, label: "区县", required: false, default: ''}
+    - text-input: {variable: address, label: "地址", required: false, default: ''}
+    - text-input: {variable: longitude, label: "经度", required: false, default: ''}
+    - text-input: {variable: latitude, label: "纬度", required: false, default: ''}
+    - text-input: {variable: checkIn, label: "入住日期", required: false, default: ''}
+    - text-input: {variable: checkOut, label: "离店日期", required: false, default: ''}
+    - text-input: {variable: commonContextJson, label: "酒店与调用上下文JSON", required: true, default: ''}
+    - text-input: {variable: businessParamsJson, label: "情报任务参数JSON", required: true, default: ''}
+    - text-input: {variable: knowledgeContextJson, label: "已确认知识上下文JSON", required: false, default: ''}
+    - text-input: {variable: query, label: "情报需求", required: true, default: ''}

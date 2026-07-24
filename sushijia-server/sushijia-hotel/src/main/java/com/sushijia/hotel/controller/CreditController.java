@@ -3,6 +3,7 @@ package com.sushijia.hotel.controller;
 import com.sushijia.common.response.R;
 import com.sushijia.framework.tenant.TenantContext;
 import com.sushijia.hotel.service.CreditService;
+import com.sushijia.hotel.service.SubscriptionService;
 import com.sushijia.repository.entity.CreditLedger;
 import com.sushijia.repository.mapper.CreditLedgerMapper;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +23,7 @@ public class CreditController {
 
     private final CreditService creditService;
     private final CreditLedgerMapper ledgerMapper;
+    private final SubscriptionService subscriptionService;
 
     /** 获取余额 + 今日消耗 */
     @GetMapping("/credits/balance")
@@ -39,8 +41,8 @@ public class CreditController {
     /** 获取流水列表（分页） */
     @GetMapping("/credits/ledger")
     public R<List<CreditLedger>> getLedger(
-            @RequestParam(defaultValue = "50") int limit,
-            @RequestParam(required = false) String type) {
+            @RequestParam(value = "limit", defaultValue = "50") int limit,
+            @RequestParam(value = "type", required = false) String type) {
         Long tenantId = TenantContext.get();
         List<CreditLedger> list = ledgerMapper.findByTenant(tenantId, limit);
         if (type != null) {
@@ -51,10 +53,24 @@ public class CreditController {
 
     /** 检查指定模块是否够算力 */
     @GetMapping("/credits/check")
-    public R<Map<String, Boolean>> checkBalance(@RequestParam String moduleKey) {
+    public R<Map<String, Boolean>> checkBalance(@RequestParam("moduleKey") String moduleKey) {
         Long tenantId = TenantContext.get();
         Map<String, Boolean> result = new HashMap<>();
-        result.put("canAfford", creditService.canAfford(tenantId, moduleKey));
+        boolean moduleEnabled = true;
+        try {
+            subscriptionService.ensureModuleEnabled(tenantId, moduleKey);
+        } catch (Exception e) {
+            moduleEnabled = false;
+        }
+        result.put("moduleEnabled", moduleEnabled);
+        result.put("canAfford", moduleEnabled && creditService.canAfford(tenantId, moduleKey));
         return R.ok(result);
+    }
+
+    /** Current subscription and plan permissions. */
+    @GetMapping("/subscription")
+    public R<Map<String, Object>> getSubscription() {
+        Long tenantId = TenantContext.get();
+        return R.ok(subscriptionService.getSubscriptionOverview(tenantId));
     }
 }

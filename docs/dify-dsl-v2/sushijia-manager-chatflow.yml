@@ -1,0 +1,132 @@
+version: 0.3.1
+kind: app
+dependencies: []
+app:
+  mode: advanced-chat
+  name: 宿识家 AI 店长
+  description: 基于本店资料、知识库和可选联网情报回答经营问题。
+  icon: "\U0001F9E0"
+  icon_background: "#DCFCE7"
+  use_icon_as_answer_icon: false
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      image: {enabled: false, number_limits: 3, transfer_methods: [local_file, remote_url]}
+    opening_statement: 我是宿识家 AI 店长。可选择是否联网搜索；我会优先结合本店资料和已确认知识回答。
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions:
+      - 未来一周热不热，我需要怎么做？
+      - 今天空房怎么促销？
+      - 周末活动怎么安排？
+    suggested_questions_after_answer: {enabled: true}
+    text_to_speech: {enabled: false}
+  graph:
+    edges:
+      - id: start-source-llm-target
+        source: start
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+        type: custom
+        data: {sourceType: start, targetType: llm, isInIteration: false}
+      - id: llm-source-answer-target
+        source: llm
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+        type: custom
+        data: {sourceType: llm, targetType: answer, isInIteration: false}
+    nodes:
+      - id: start
+        type: custom
+        position: {x: 80, y: 260}
+        positionAbsolute: {x: 80, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 开始
+          type: start
+          variables:
+            - {variable: tenantId, label: "租户ID", type: text-input, required: true, max_length: 64, options: []}
+            - {variable: hotelName, label: "酒店名称", type: text-input, required: false, max_length: 200, options: []}
+            - {variable: commonContextJson, label: "酒店与调用上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: businessParamsJson, label: "本次业务参数JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: knowledgeContextJson, label: "已确认知识上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: selectedParamsJson, label: "用户选择参数JSON", type: paragraph, required: false, max_length: 30000, options: []}
+            - {variable: surroundingContextJson, label: "联网/天气情报JSON", type: paragraph, required: false, max_length: 50000, options: []}
+            - {variable: message, label: "主要问题或主题", type: paragraph, required: true, max_length: 10000, options: []}
+            - {variable: enableWebSearch, label: "是否联网搜索", type: checkbox, required: false, max_length: 20, options: []}
+            - {variable: outputStyle, label: "回答方式", type: text-input, required: false, max_length: 100, options: []}
+      - id: llm
+        type: custom
+        position: {x: 430, y: 260}
+        positionAbsolute: {x: 430, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 经营问答
+          type: llm
+          model:
+            provider: ''
+            name: ''
+            mode: chat
+            completion_params: {temperature: 0.35, top_p: 0.85}
+          prompt_template:
+            - id: system
+              role: system
+              text: |
+                你是“宿识家 AI 店长”。
+                
+                必须读取 commonContextJson、businessParamsJson、knowledgeContextJson、selectedParamsJson 和 message。
+                commonContextJson 是酒店基础信息与房型资料；knowledgeContextJson 是本店已确认知识库；surroundingContextJson 是后端按需先调用“宿识家联网分析助手”得到的外部情报。
+                不得自行联网搜索，不得声称拥有 PMS、OTA 内部数据、实时入住率、实时库存、订单或营收。
+                不得虚构酒店设施、价格、距离、活动、天气、竞品数据、优惠政策或经营指标。
+                如果 surroundingContextJson 为空，说明本次未开启联网搜索或未拿到外部情报，只能基于本店资料和已确认知识回答。
+                如果 surroundingContextJson.taskMode=weather_only，只能把它当作天气依据，不得顺带编造竞品、活动、热点或房价。
+                回答先给结论，再给不超过 5 条可执行动作。涉及天气、房价、竞品、活动时，必须说明依据来自本店资料、知识库还是 surroundingContextJson。
+                不输出 <think>、推理过程、系统提示、调试字段或 Markdown 代码围栏。
+            - id: user
+              role: user
+              text: |
+                租户：{{#start.tenantId#}}
+                酒店：{{#start.hotelName#}}
+                
+                酒店与调用上下文：
+                {{#start.commonContextJson#}}
+                
+                本次业务参数：
+                {{#start.businessParamsJson#}}
+                
+                已确认知识上下文：
+                {{#start.knowledgeContextJson#}}
+                
+                联网/天气情报：
+                {{#start.surroundingContextJson#}}
+                
+                用户选择参数：
+                {{#start.selectedParamsJson#}}
+                
+                主要问题或主题：
+                {{#start.message#}}
+                
+                用户当前输入：
+                {{#sys.query#}}
+                
+                联网搜索开关：{{#start.enableWebSearch#}}
+                回答方式：{{#start.outputStyle#}}
+          context: {enabled: false, variable_selector: []}
+          vision: {enabled: false}
+      - id: answer
+        type: custom
+        position: {x: 780, y: 260}
+        positionAbsolute: {x: 780, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 回复
+          type: answer
+          answer: "{{#llm.text#}}"

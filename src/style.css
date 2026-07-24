@@ -5,8 +5,8 @@
 @layer base {
   body {
     @apply bg-cream-100 text-bamboo-800 font-sans antialiased;
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.5;
   }
   
   ::-webkit-scrollbar {
@@ -67,4 +67,247 @@
   .badge-blue { @apply bg-blue-50 text-blue-600; }
   .badge-rose { @apply bg-rose-50 text-rose-400; }
   .badge-purple { @apply bg-purple-50 text-purple-600; }
+
+  .studio-page {
+    @apply space-y-4 pb-6;
+  }
+
+  .studio-hero {
+    @apply overflow-hidden rounded-3xl border border-cream-300 bg-white shadow-sm;
+  }
+
+  .studio-title {
+    @apply text-2xl font-semibold leading-tight text-bamboo-950;
+  }
+
+  .studio-subtitle {
+    @apply mt-2 max-w-3xl text-sm leading-6 text-warm-600;
+  }
+
+  .studio-panel {
+    @apply rounded-3xl border border-cream-300 bg-white shadow-sm;
+  }
+
+  .studio-section-title {
+    @apply text-base font-semibold text-bamboo-950;
+  }
+
+  .studio-section-help {
+    @apply mt-1 text-xs leading-5 text-warm-500;
+  }
+
+  .studio-label {
+    @apply mb-2 block text-xs font-semibold tracking-wide text-warm-500;
+  }
+
+  .studio-input {
+    @apply w-full rounded-xl border border-cream-300 bg-white px-3 py-2.5 text-sm text-bamboo-950 outline-none transition placeholder:text-warm-400 focus:border-bamboo-400 focus:ring-2 focus:ring-bamboo-100;
+  }
+
+  .studio-chip {
+    @apply rounded-full border border-cream-300 bg-white px-3 py-1.5 text-sm font-medium text-warm-600 transition hover:border-bamboo-400 hover:bg-bamboo-50 hover:text-bamboo-800;
+  }
+
+  .studio-chip-active {
+    @apply border-bamboo-800 bg-bamboo-800 text-bamboo-50 hover:bg-bamboo-800 hover:text-bamboo-50;
+  }
+
+  .studio-output-card {
+    @apply rounded-2xl border border-cream-300 bg-white p-4 shadow-sm;
+  }
+
+  .content-studio-shell {
+    @apply px-3 py-3 sm:px-4 lg:px-5 lg:py-4;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-\[10px\] {
+    font-size: 10.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-\[11px\] {
+    font-size: 11.5px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-\[12px\],
+  .hotel-workspace-shell:not(.content-studio-shell) .text-xs {
+    font-size: 12px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-\[13px\],
+  .hotel-workspace-shell:not(.content-studio-shell) .text-sm {
+    font-size: 13px !important;
+    line-height: 1.5 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-base {
+    font-size: 14px !important;
+    line-height: 1.45 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-lg {
+    font-size: 16px !important;
+    line-height: 1.35 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-xl {
+    font-size: 18px !important;
+    line-height: 1.3 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-2xl {
+    font-size: 22px !important;
+    line-height: 1.2 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .text-3xl {
+    font-size: 26px !important;
+    line-height: 1.15 !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) input,
+  .hotel-workspace-shell:not(.content-studio-shell) select,
+  .hotel-workspace-shell:not(.content-studio-shell) textarea {
+    min-height: 36px;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) button {
+    min-height: 34px;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .p-4 {
+    padding: 0.875rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .p-5 {
+    padding: 1rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .p-6 {
+    padding: 1.125rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .px-6 {
+    padding-left: 1.125rem !important;
+    padding-right: 1.125rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .py-6 {
+    padding-top: 1.125rem !important;
+    padding-bottom: 1.125rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .gap-5 {
+    gap: 1rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .gap-6 {
+    gap: 1.125rem !important;
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .space-y-5 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(1rem * var(--tw-space-y-reverse));
+  }
+
+  .hotel-workspace-shell:not(.content-studio-shell) .space-y-6 > :not([hidden]) ~ :not([hidden]) {
+    --tw-space-y-reverse: 0;
+    margin-top: calc(1.125rem * calc(1 - var(--tw-space-y-reverse)));
+    margin-bottom: calc(1.125rem * var(--tw-space-y-reverse));
+  }
+
+  .content-studio-shell .text-\[10px\] {
+    font-size: 11px !important;
+    line-height: 1.48 !important;
+  }
+
+  .content-studio-shell .text-\[11px\] {
+    font-size: 12px !important;
+    line-height: 1.52 !important;
+  }
+
+  .content-studio-shell .text-\[12px\],
+  .content-studio-shell .text-xs {
+    font-size: 12.5px !important;
+    line-height: 1.54 !important;
+  }
+
+  .content-studio-shell .text-\[13px\],
+  .content-studio-shell .text-sm {
+    font-size: 13.5px !important;
+    line-height: 1.54 !important;
+  }
+
+  .content-studio-shell .text-base {
+    font-size: 15.5px !important;
+    line-height: 1.48 !important;
+  }
+
+  .content-studio-shell .text-lg {
+    font-size: 18px !important;
+    line-height: 1.38 !important;
+  }
+
+  .content-studio-shell input,
+  .content-studio-shell select,
+  .content-studio-shell textarea {
+    min-height: 38px;
+    font-size: 13.5px;
+    line-height: 1.54;
+  }
+
+  .content-studio-shell textarea {
+    min-height: 116px;
+  }
+
+  .content-studio-shell button {
+    min-height: 36px;
+  }
+
+  .content-studio-shell .p-3 {
+    padding: 0.75rem !important;
+  }
+
+  .content-studio-shell .p-4 {
+    padding: 1rem !important;
+  }
+
+  .content-studio-shell .gap-3 {
+    gap: 0.75rem !important;
+  }
+
+  .content-studio-shell .gap-4 {
+    gap: 1rem !important;
+  }
+
+  .content-studio-shell .grid-cols-\[340px_1fr\] {
+    grid-template-columns: minmax(320px, 340px) minmax(0, 1fr) !important;
+  }
+
+  .content-studio-shell .grid-cols-\[360px_1fr\] {
+    grid-template-columns: minmax(340px, 360px) minmax(0, 1fr) !important;
+  }
+
+  .content-studio-shell .grid-cols-\[1fr_320px\] {
+    grid-template-columns: minmax(0, 1fr) minmax(300px, 320px) !important;
+  }
+
+  .content-studio-shell .grid-cols-\[1fr_340px\] {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 340px) !important;
+  }
+
+  .content-studio-shell .max-w-6xl,
+  .content-studio-shell .max-w-7xl {
+    max-width: 1480px !important;
+  }
 }

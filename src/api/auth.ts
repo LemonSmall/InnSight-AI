@@ -11,8 +11,8 @@ export function loginByPhone(phone: string, code: string) {
 }
 
 /** 密码登录（后台） */
-export function loginByPassword(email: string, password: string) {
-  return api.post('/api/admin/auth/login', { email, password })
+export function loginByPassword(phone: string, password: string) {
+  return api.post('/api/auth/login/password', { phone, password })
 }
 
 // ====== 员工管理 ======
@@ -23,7 +23,7 @@ export function getStaffList() {
 }
 
 /** 新增员工 */
-export function createStaff(data: { name: string; phone: string; role: string }) {
+export function createStaff(data: { name: string; phone: string; role: string; password?: string }) {
   return api.post('/api/hotel/staff', data)
 }
 
@@ -35,6 +35,11 @@ export function updateStaff(id: number, data: { name?: string; phone?: string; r
 /** 删除员工 */
 export function deleteStaff(id: number) {
   return api.delete(`/api/hotel/staff/${id}`)
+}
+
+/** 重置员工密码 */
+export function resetStaffPassword(id: number, newPassword: string) {
+  return api.put(`/api/hotel/staff/${id}/password`, { newPassword })
 }
 
 // ====== 个人信息 ======

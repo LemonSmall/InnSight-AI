@@ -5,6 +5,30 @@ export function saveConfig(cfg: Record<string, any>) {
   return api.put('/api/hotel/config', cfg)
 }
 
+export function searchHotelPoi(params: { keyword: string; city?: string }) {
+  return api.get('/api/hotel/poi/search', { params })
+}
+
+export function bindHotelPoi(data: { poiId: string }) {
+  return api.post('/api/hotel/poi/bind', data)
+}
+
+export function bindHotelPoiCandidate(data: Record<string, any>) {
+  return api.post('/api/hotel/poi/bind-candidate', data)
+}
+
+export function getRegionChildren(params: { keyword?: string; subdistrict?: number }) {
+  return api.get('/api/hotel/region/children', { params })
+}
+
+export function getCurrentWeather() {
+  return api.get('/api/hotel/weather/current')
+}
+
+export function getSurroundingRecommendation() {
+  return api.post('/api/hotel/surrounding/recommendation')
+}
+
 export function getRoomTypes() {
   return api.get('/api/hotel/rooms')
 }
@@ -13,21 +37,24 @@ export function saveRoomTypes(rooms: Record<string, any>[]) {
   return api.put('/api/hotel/rooms', rooms)
 }
 
+export function deleteRoomType(id: string | number) {
+  return api.delete(`/api/hotel/rooms/${encodeURIComponent(String(id))}`)
+}
+
+export function getOccupancyImportRecords() {
+  return api.get('/api/hotel/occupancy-imports/current')
+}
+
+export function importOccupancyRecords(data: Record<string, any>) {
+  return api.post('/api/hotel/occupancy-imports/import', data)
+}
+
 // ====== 大盘 ======
 export function getDashboard() {
   return api.get('/api/hotel/dashboard')
 }
 
-// ====== 房态分析 ======
-export function getRoomStatusDetail() {
-  return api.get('/api/hotel/room-status')
-}
-
 // ====== 智能定价 ======
-export function getPricing(params: Record<string, string>) {
-  return api.post('/api/hotel/pricing/recommend', params)
-}
-
 // ====== 算力 ======
 export function getCreditBalance() {
   return api.get('/api/hotel/credits/balance')
@@ -37,20 +64,15 @@ export function getCreditLedger(limit = 50, type?: string) {
   return api.get(`/api/hotel/credits/ledger?limit=${limit}${type ? '&type=' + type : ''}`)
 }
 
-// ====== 在住客人 ======
-export function getGuests() {
-  return api.get('/api/hotel/guests')
+export function checkCredits(moduleKey: string) {
+  return api.get(`/api/hotel/credits/check?moduleKey=${encodeURIComponent(moduleKey)}`)
+}
+
+export function getSubscription() {
+  return api.get('/api/hotel/subscription')
 }
 
 // ====== 好评/回评 ======
-export function generateReview(params: Record<string, string>) {
-  return api.post('/api/hotel/review/generate', params)
-}
-
-export function generateReply(params: Record<string, string>) {
-  return api.post('/api/hotel/reply/generate', params)
-}
-
 // ====== 营销方案 ======
 export function getPlans() {
   return api.get('/api/hotel/plans')

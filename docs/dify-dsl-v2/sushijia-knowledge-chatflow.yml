@@ -1,0 +1,133 @@
+version: 0.3.0
+kind: app
+app:
+  mode: advanced-chat
+  name: 宿识家资料管家
+  description: 提取酒店资料、识别临时经营事件、生成待确认知识更新。
+  icon: "\U0001F4DA"
+  icon_background: "#EDE9FE"
+workflow:
+  features:
+    file_upload:
+      image:
+        enabled: true
+        number_limits: 10
+        transfer_methods:
+          - local_file
+          - remote_url
+    opening_statement: 可以上传酒店资料，或直接描述一条变化。我会提取事实并生成待确认的知识更新。
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions:
+      - 二楼装修一天，相关房间暂停销售
+      - 从这份资料中提取酒店信息
+      - 检查这条信息会影响哪些经营功能
+    suggested_questions_after_answer: {enabled: false}
+    text_to_speech: {enabled: false}
+  graph:
+    edges:
+      - id: start-source-llm-target
+        source: start
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+        type: custom
+        data: {sourceType: start, targetType: llm, isInIteration: false}
+      - id: llm-source-answer-target
+        source: llm
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+        type: custom
+        data: {sourceType: llm, targetType: answer, isInIteration: false}
+    nodes:
+      - id: start
+        type: custom
+        position: {x: 80, y: 260}
+        positionAbsolute: {x: 80, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 开始
+          type: start
+          variables:
+            - {variable: tenantId, label: 租户ID, type: text-input, required: true, max_length: 64, options: []}
+            - {variable: hotelName, label: 酒店名称, type: text-input, required: false, max_length: 200, options: []}
+            - {variable: sourceType, label: 来源类型, type: text-input, required: true, max_length: 100, options: []}
+            - {variable: sourceContent, label: 文本或文档解析内容, type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: hotelContext, label: 现有酒店上下文JSON, type: paragraph, required: false, max_length: 30000, options: []}
+            - {variable: existingKnowledge, label: 现有知识JSON, type: paragraph, required: false, max_length: 30000, options: []}
+            - {variable: currentTime, label: 当前时间, type: text-input, required: false, max_length: 100, options: []}
+      - id: llm
+        type: custom
+        position: {x: 430, y: 260}
+        positionAbsolute: {x: 430, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 资料提取
+          type: llm
+          model:
+            provider: openai
+            name: gpt-4o
+            mode: chat
+            completion_params: {temperature: 0.1, top_p: 0.7}
+          prompt_template:
+            - id: system
+              role: system
+              text: |
+                你是“宿识家资料管家”，负责把酒店上传的文本、文档解析结果和临时通知变成待确认知识。
+
+                规则：
+                1. 只提取来源中明确存在的事实，不补全、不推测。
+                2. 区分长期资料和临时经营事件。
+                3. 临时事件必须提取开始时间、结束时间、影响范围；缺失时标记为待补充。
+                4. 识别与现有知识的新增、修改、冲突和过期关系。
+                5. 只输出合法 JSON，不输出 Markdown、推理过程或解释文字。
+                6. 所有知识先进入 pending 状态，必须由酒店员工确认后才能用于生产回答。
+
+                JSON 输出结构：
+                {
+                  "summary": "给用户确认的一句话摘要",
+                  "knowledge_type": "profile|facility|room|policy|service|event|other",
+                  "operation": "create|update|expire|conflict",
+                  "facts": [{"key":"","value":"","evidence":"","confidence":0.0}],
+                  "effective_from": "",
+                  "effective_to": "",
+                  "affected_modules": [],
+                  "missing_fields": [],
+                  "conflicts": [],
+                  "status": "pending"
+                }
+            - id: user
+              role: user
+              text: |
+                租户：{{#start.tenantId#}}
+                酒店：{{#start.hotelName#}}
+                来源类型：{{#start.sourceType#}}
+                当前时间：{{#start.currentTime#}}
+
+                来源内容：
+                {{#start.sourceContent#}}
+
+                现有酒店上下文：
+                {{#start.hotelContext#}}
+
+                现有知识：
+                {{#start.existingKnowledge#}}
+
+                用户补充说明：
+                {{#sys.query#}}
+          context: {enabled: false, variable_selector: []}
+          vision: {enabled: true}
+      - id: answer
+        type: custom
+        position: {x: 780, y: 260}
+        positionAbsolute: {x: 780, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 回复
+          type: answer
+          answer: "{{#llm.text#}}"

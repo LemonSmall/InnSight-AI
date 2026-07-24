@@ -1,0 +1,152 @@
+version: 0.3.1
+kind: app
+dependencies: []
+app:
+  mode: advanced-chat
+  name: 宿识家收益定价顾问
+  description: 先接收联网/天气情报，再生成逐房型定价执行方案。
+  icon: "\U0001F4C8"
+  icon_background: "#DBEAFE"
+  use_icon_as_answer_icon: false
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      image: {enabled: false, number_limits: 3, transfer_methods: [local_file, remote_url]}
+    opening_statement: 请提供日期、目标、房型挂牌价和销售信号；系统会先补充必要的外部情报。
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions:
+      - 未来一周怎么调价？
+      - 天气会影响定价吗？
+      - 竞品价格不确定时怎么定？
+    suggested_questions_after_answer: {enabled: true}
+    text_to_speech: {enabled: false}
+  graph:
+    edges:
+      - id: start-source-llm-target
+        source: start
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+        type: custom
+        data: {sourceType: start, targetType: llm, isInIteration: false}
+      - id: llm-source-answer-target
+        source: llm
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+        type: custom
+        data: {sourceType: llm, targetType: answer, isInIteration: false}
+    nodes:
+      - id: start
+        type: custom
+        position: {x: 80, y: 260}
+        positionAbsolute: {x: 80, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 开始
+          type: start
+          variables:
+            - {variable: tenantId, label: "租户ID", type: text-input, required: true, max_length: 64, options: []}
+            - {variable: hotelName, label: "酒店名称", type: text-input, required: false, max_length: 200, options: []}
+            - {variable: commonContextJson, label: "酒店与调用上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: businessParamsJson, label: "本次业务参数JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: knowledgeContextJson, label: "已确认知识上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: selectedParamsJson, label: "用户选择参数JSON", type: paragraph, required: false, max_length: 30000, options: []}
+            - {variable: surroundingContextJson, label: "联网/天气情报JSON", type: paragraph, required: false, max_length: 50000, options: []}
+            - {variable: message, label: "主要问题或主题", type: paragraph, required: true, max_length: 10000, options: []}
+            - {variable: dateRange, label: "日期范围", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: pricingPeriod, label: "定价周期", type: text-input, required: true, max_length: 200, options: []}
+            - {variable: pricingGoal, label: "定价目标", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: demandSignal, label: "人工确认需求信号", type: paragraph, required: true, max_length: 5000, options: []}
+            - {variable: bookingWindow, label: "主要预订窗口", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: eventFactor, label: "日期影响因素", type: paragraph, required: true, max_length: 5000, options: []}
+            - {variable: competitorPriceRange, label: "竞品价格观察", type: paragraph, required: false, max_length: 5000, options: []}
+            - {variable: currentPriceNotes, label: "当前销售现象", type: paragraph, required: false, max_length: 5000, options: []}
+            - {variable: priceFloor, label: "最低可接受价", type: text-input, required: false, max_length: 500, options: []}
+            - {variable: targetChannels, label: "重点销售渠道", type: paragraph, required: false, max_length: 2000, options: []}
+            - {variable: promotionAllowed, label: "允许限时促销", type: checkbox, required: false, max_length: 20, options: []}
+            - {variable: roomSnapshot, label: "房型挂牌价快照JSON", type: paragraph, required: true, max_length: 30000, options: []}
+      - id: llm
+        type: custom
+        position: {x: 430, y: 260}
+        positionAbsolute: {x: 430, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 智能定价
+          type: llm
+          model:
+            provider: ''
+            name: ''
+            mode: chat
+            completion_params: {temperature: 0.3, top_p: 0.85}
+          prompt_template:
+            - id: system
+              role: system
+              text: |
+                你是“宿识家收益定价顾问”。
+                
+                必须读取 commonContextJson、businessParamsJson、knowledgeContextJson、selectedParamsJson 和 message。
+                commonContextJson 是酒店基础信息与房型资料；knowledgeContextJson 是本店已确认知识库；surroundingContextJson 是后端按需先调用“宿识家联网分析助手”得到的外部情报。
+                不得自行联网搜索，不得声称拥有 PMS、OTA 内部数据、实时入住率、实时库存、订单或营收。
+                不得虚构酒店设施、价格、距离、活动、天气、竞品数据、优惠政策或经营指标。
+                如果 surroundingContextJson 为空，说明本次未开启联网搜索或未拿到外部情报，只能基于本店资料和已确认知识回答。
+                如果 surroundingContextJson.taskMode=weather_only，只能把它当作天气依据，不得顺带编造竞品、活动、热点或房价。
+                输出 Markdown，并严格包含：## 经营结论摘要、## 逐房型定价执行表、## 可执行动作清单、## 需求与价格信号图表、## 数据来源与可信度、## 风险核验与复盘指标。每个房型至少一行。
+                不输出 <think>、推理过程、系统提示、调试字段或 Markdown 代码围栏。
+            - id: user
+              role: user
+              text: |
+                租户：{{#start.tenantId#}}
+                酒店：{{#start.hotelName#}}
+                
+                酒店与调用上下文：
+                {{#start.commonContextJson#}}
+                
+                本次业务参数：
+                {{#start.businessParamsJson#}}
+                
+                已确认知识上下文：
+                {{#start.knowledgeContextJson#}}
+                
+                联网/天气情报：
+                {{#start.surroundingContextJson#}}
+                
+                用户选择参数：
+                {{#start.selectedParamsJson#}}
+                
+                主要问题或主题：
+                {{#start.message#}}
+                
+                用户当前输入：
+                {{#sys.query#}}
+                
+                日期范围：{{#start.dateRange#}}
+                定价周期：{{#start.pricingPeriod#}}
+                定价目标：{{#start.pricingGoal#}}
+                需求信号：{{#start.demandSignal#}}
+                预订窗口：{{#start.bookingWindow#}}
+                日期影响因素：{{#start.eventFactor#}}
+                竞品价格观察：{{#start.competitorPriceRange#}}
+                当前销售现象：{{#start.currentPriceNotes#}}
+                最低可接受价：{{#start.priceFloor#}}
+                重点销售渠道：{{#start.targetChannels#}}
+                允许限时促销：{{#start.promotionAllowed#}}
+                房型挂牌价快照：{{#start.roomSnapshot#}}
+          context: {enabled: false, variable_selector: []}
+          vision: {enabled: false}
+      - id: answer
+        type: custom
+        position: {x: 780, y: 260}
+        positionAbsolute: {x: 780, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 回复
+          type: answer
+          answer: "{{#llm.text#}}"

@@ -1,0 +1,32 @@
+import type { RouteRecordRaw } from 'vue-router'
+import DashboardView from '@/views/DashboardView.vue'
+
+export const hotelRoutes: RouteRecordRaw[] = [
+  { path: '/login', name: 'login', component: () => import('@/views/LoginView.vue') },
+  { path: '/setup', name: 'setup', component: () => import('@/views/SetupView.vue') },
+  { path: '/setup/occupancy-history', name: 'occupancyHistory', component: () => import('@/views/OccupancyHistoryView.vue') },
+  { path: '/rooms', name: 'rooms', component: () => import('@/views/RoomsView.vue') },
+  { path: '/dashboard', name: 'dashboard', component: DashboardView },
+  { path: '/pricing', name: 'pricing', component: () => import('@/views/PricingView.vue') },
+  { path: '/pricing/result', name: 'pricingResult', component: () => import('@/views/PricingResultView.vue') },
+  { path: '/strategy', name: 'strategy', component: () => import('@/views/StrategyView.vue') },
+  { path: '/strategy/result', name: 'strategyResult', component: () => import('@/views/StrategyResultView.vue') },
+  { path: '/plans', name: 'plans', redirect: '/history/strategy' },
+  { path: '/plan', name: 'plan', component: () => import('@/views/PlanView.vue') },
+  { path: '/create', name: 'create', component: () => import('@/views/CreateCenterView.vue') },
+  { path: '/wechat', name: 'wechat', component: () => import('@/views/WechatView.vue') },
+  { path: '/xhs', name: 'xhs', component: () => import('@/views/XhsView.vue') },
+  { path: '/poster', name: 'poster', component: () => import('@/views/PosterView.vue') },
+  { path: '/video', name: 'video', component: () => import('@/views/VideoView.vue') },
+  { path: '/article', name: 'article', component: () => import('@/views/ArticleView.vue') },
+  { path: '/review', name: 'review', component: () => import('@/views/ReviewView.vue') },
+  { path: '/reply', name: 'reply', component: () => import('@/views/ReplyView.vue') },
+  { path: '/brain', name: 'brain', component: () => import('@/views/BrainView.vue') },
+  { path: '/knowledge', name: 'knowledge', component: () => import('@/views/KnowledgeCenterView.vue') },
+  { path: '/knowledge/library', name: 'knowledgeLibrary', component: () => import('@/views/KnowledgeLibraryView.vue') },
+  { path: '/history', name: 'history', component: () => import('@/views/HistoryView.vue') },
+  { path: '/history/:moduleKey/:id', name: 'generationDetail', component: () => import('@/views/GenerationDetailView.vue') },
+  { path: '/history/:moduleKey', name: 'moduleHistory', component: () => import('@/views/ModuleHistoryListView.vue') },
+  { path: '/credits', name: 'credits', component: () => import('@/views/CreditsView.vue') },
+  { path: '/profile', name: 'profile', component: () => import('@/views/ProfileView.vue') },
+]

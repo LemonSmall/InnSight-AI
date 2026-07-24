@@ -28,7 +28,7 @@ public class PromptAdminController {
     }
 
     @GetMapping("/prompts/{moduleKey}")
-    public R<List<PromptTemplate>> getVersions(@PathVariable String moduleKey) {
+    public R<List<PromptTemplate>> getVersions(@PathVariable("moduleKey") String moduleKey) {
         return R.ok(promptMapper.findVersionsByModule(moduleKey));
     }
 
@@ -40,14 +40,14 @@ public class PromptAdminController {
     }
 
     @PutMapping("/prompts/{id}")
-    public R<String> updatePrompt(@PathVariable Long id, @RequestBody PromptTemplate template) {
+    public R<String> updatePrompt(@PathVariable("id") Long id, @RequestBody PromptTemplate template) {
         template.setId(id);
         promptMapper.updateById(template);
         return R.ok("ok");
     }
 
     @PutMapping("/prompts/{id}/rollback")
-    public R<String> rollback(@PathVariable Long id) {
+    public R<String> rollback(@PathVariable("id") Long id) {
         PromptTemplate toRollback = promptMapper.selectById(id);
         if (toRollback == null) return R.fail(404, "版本不存在");
 
@@ -80,7 +80,7 @@ public class PromptAdminController {
     }
 
     @PutMapping("/styles/{id}")
-    public R<String> updateStyle(@PathVariable Long id, @RequestBody StyleLibrary style) {
+    public R<String> updateStyle(@PathVariable("id") Long id, @RequestBody StyleLibrary style) {
         style.setId(id);
         styleMapper.updateById(style);
         return R.ok("ok");

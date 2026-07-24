@@ -8,7 +8,7 @@ interface PromptModule { key: string; name: string; cost: string; version: strin
 
 const modules: PromptModule[] = [
   { key: 'xhs', name: '小红书图文生成', cost: '23家使用 · 挂载风格库', version: 'v3', icon: 'IG', icBg: 'bg-pink-500/10', icColor: 'text-pink-400' },
-  { key: 'room_status', name: '房态数据分析与早报', cost: '23家使用', version: 'v5', icon: 'GR', icBg: 'bg-blue-500/10', icColor: 'text-blue-400' },
+  { key: 'profile_audit', name: '酒店资料完整度检查', cost: '资料驱动', version: 'v1', icon: 'PF', icBg: 'bg-blue-500/10', icColor: 'text-blue-400' },
   { key: 'strategy', name: '周期营销策略生成', cost: '21家使用', version: 'v2', icon: 'LB', icBg: 'bg-amber-500/10', icColor: 'text-amber-400' },
   { key: 'pricing', name: '智能定价建议', cost: '23家使用', version: 'v4', icon: 'CN', icBg: 'bg-amber-500/10', icColor: 'text-amber-400' },
   { key: 'wechat', name: '朋友圈三档文案', cost: '23家使用 · 挂载风格库', version: 'v3', icon: 'WC', icBg: 'bg-emerald-500/10', icColor: 'text-emerald-400' },
@@ -19,11 +19,11 @@ const modules: PromptModule[] = [
 
 const templates: Record<string, { content: string; model: string; maxTokens: number }> = {
   xhs: {
-    content: `你是专业的民宿内容营销专家。请为以下民宿生成小红书图文笔记：\n\n民宿信息：\n- 名称：{{hotel_name}}（{{hotel_type}}）\n- 位置：{{hotel_city}}\n- 核心特色：{{hotel_tags}}\n- 目标客群：{{hotel_target}}\n\n实时上下文：\n- 今日天气：{{weather}}\n- 今日出租率：{{occupancy_rate}}%\n- 节假日提醒：{{holiday_countdown}}\n\n内容主题：{{content_theme}}\n写作风格：{{writing_style}}\n\n请按以下格式输出：\n【标题备选】（3个）\n【正文内容】\n【话题标签】（8-12个）`,
+    content: `你是专业的民宿内容营销专家。请根据酒店主动填写并确认的资料生成小红书图文笔记：\n\n民宿信息：\n- 名称：{{hotel_name}}（{{hotel_type}}）\n- 位置：{{hotel_city}}\n- 核心特色：{{hotel_tags}}\n- 目标客群：{{hotel_target}}\n- 已确认知识：{{confirmed_knowledge}}\n\n内容主题：{{content_theme}}\n写作风格：{{writing_style}}\n\n不得虚构实时入住率、房量、订单、价格或活动。请输出标题备选、正文内容和话题标签。`,
     model: 'claude-sonnet-4-6', maxTokens: 1000,
   },
-  room_status: {
-    content: `你是酒店数据分析师。请根据以下数据生成房态早报：\n\n房型与房态：{{room_status_data}}\n今日出租率：{{occupancy_rate}}%\n对比昨日：{{yesterday_occupancy}}%\n\n请分析：出租率趋势、空房率、高需求房型、今日运营建议。`,
+  profile_audit: {
+    content: `请检查酒店基础资料、房型参考信息和已确认知识是否足以支持内容生成与经营建议。输出已完善项、缺失项、建议补充顺序和可直接向酒店方询问的问题。不得推测订单、房态或实时经营数据。`,
     model: 'claude-sonnet-4-6', maxTokens: 800,
   },
 }
@@ -31,7 +31,7 @@ const templates: Record<string, { content: string; model: string; maxTokens: num
 const selected = ref<PromptModule>(modules[0])
 const activeTemplate = ref(templates['xhs'])
 
-const variables = ['{{hotel_name}}', '{{hotel_type}}', '{{hotel_city}}', '{{hotel_tags}}', '{{hotel_target}}', '{{weather}}', '{{occupancy_rate}}', '{{holiday_countdown}}', '{{content_theme}}', '{{writing_style}}']
+const variables = ['{{hotel_name}}', '{{hotel_type}}', '{{hotel_city}}', '{{hotel_tags}}', '{{hotel_target}}', '{{confirmed_knowledge}}', '{{content_theme}}', '{{writing_style}}']
 
 function selectModule(m: PromptModule) {
   selected.value = m

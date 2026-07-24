@@ -1,124 +1,87 @@
 package com.sushijia.hotel.service;
 
-import com.sushijia.framework.tenant.TenantContext;
-import com.sushijia.repository.entity.*;
-import com.sushijia.repository.mapper.*;
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sushijia.repository.entity.RoomType;
+import com.sushijia.repository.mapper.RoomTypeMapper;
+import com.sushijia.repository.mapper.TenantMapper;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
-import java.util.stream.Collectors;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.TimeUnit;
 
 /**
- * 数字营销大盘服务
+ * Hotel profile dashboard data.
+ *
+ * The product is not connected to a PMS, OTA or order system, so this service
+ * only exposes tenant-maintained hotel and room-type reference information.
  */
 @Service
 @RequiredArgsConstructor
 public class DashboardService {
 
-    private final RoomStatusMapper roomStatusMapper;
     private final RoomTypeMapper roomTypeMapper;
-    private final FutureRoomStatusMapper futureRoomStatusMapper;
-    private final GuestMapper guestMapper;
     private final TenantMapper tenantMapper;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public Map<String, Object> getDashboard(Long tenantId) {
+        String cacheKey = "sushijia:tenant:" + tenantId + ":dashboard";
+        Map<String, Object> cached = readDashboard(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("kpi", calcKpis(tenantId));
-        result.put("roomTypeStats", calcRoomTypeStats(tenantId));
-        result.put("futureStatus", calcFutureStatus(tenantId));
-        result.put("guests", queryGuests(tenantId));
         result.put("config", tenantMapper.selectById(tenantId));
+        result.put("roomTypeStats", loadRoomTypes(tenantId));
+        result.put("dataScope", "tenant_profile_and_confirmed_knowledge_only");
+        writeDashboard(cacheKey, result);
         return result;
     }
 
-    private Map<String, Object> calcKpis(Long tenantId) {
+    private List<Map<String, Object>> loadRoomTypes(Long tenantId) {
         List<RoomType> roomTypes = roomTypeMapper.selectList(
-                query(RoomType.class).eq(RoomType::getTenantId, tenantId));
-        int totalRooms = roomTypes.stream().mapToInt(RoomType::getCount).sum();
+            new LambdaQueryWrapper<RoomType>()
+                .eq(RoomType::getTenantId, tenantId)
+                .eq(RoomType::getEnabled, 1)
+                .orderByAsc(RoomType::getSortOrder)
+                .orderByAsc(RoomType::getId));
 
-        List<RoomStatus> statuses = roomStatusMapper.selectList(
-                query(RoomStatus.class).eq(RoomStatus::getTenantId, tenantId));
-        int totalSold = (int) statuses.stream().filter(r -> "sold".equals(r.getStatus())).count();
-
-        Map<Long, java.math.BigDecimal> priceMap = roomTypes.stream()
-                .collect(Collectors.toMap(RoomType::getId, RoomType::getBasePrice));
-        int totalRevenue = statuses.stream()
-                .filter(r -> "sold".equals(r.getStatus()))
-                .mapToInt(r -> priceMap.getOrDefault(r.getRoomTypeId(), java.math.BigDecimal.ZERO).intValue())
-                .sum();
-
-        int occupancyRate = totalRooms > 0 ? Math.round((float) totalSold / totalRooms * 100) : 0;
-        int revpar = totalRooms > 0 ? Math.round((float) totalRevenue / totalRooms) : 0;
-
-        Map<String, Object> kpi = new LinkedHashMap<>();
-        kpi.put("occupancyRate", occupancyRate);
-        kpi.put("totalSold", totalSold);
-        kpi.put("totalRooms", totalRooms);
-        kpi.put("freeCount", totalRooms - totalSold);
-        kpi.put("totalRevenue", totalRevenue);
-        kpi.put("revpar", revpar);
-        return kpi;
-    }
-
-    private List<Map<String, Object>> calcRoomTypeStats(Long tenantId) {
-        List<RoomType> roomTypes = roomTypeMapper.selectList(
-                query(RoomType.class).eq(RoomType::getTenantId, tenantId));
-
-        List<Map<String, Object>> stats = new ArrayList<>();
-        for (RoomType rt : roomTypes) {
-            List<RoomStatus> rooms = roomStatusMapper.selectList(
-                    query(RoomStatus.class).eq(RoomStatus::getTenantId, tenantId)
-                            .eq(RoomStatus::getRoomTypeId, rt.getId()));
-
-            Map<String, Object> stat = new LinkedHashMap<>();
-            stat.put("id", rt.getId());
-            stat.put("name", rt.getName());
-            stat.put("basePrice", rt.getBasePrice());
-            stat.put("total", rooms.size());
-            stat.put("sold", rooms.stream().filter(r -> "sold".equals(r.getStatus())).count());
-            stat.put("free", rooms.stream().filter(r -> "free".equals(r.getStatus())).count());
-            stat.put("dirty", rooms.stream().filter(r -> "dirty".equals(r.getStatus())).count());
-            stat.put("repair", rooms.stream().filter(r -> "repair".equals(r.getStatus())).count());
-            stats.add(stat);
+        List<Map<String, Object>> result = new ArrayList<>();
+        for (RoomType roomType : roomTypes) {
+            Map<String, Object> item = new LinkedHashMap<>();
+            item.put("id", roomType.getId());
+            item.put("name", roomType.getName());
+            item.put("basePrice", roomType.getBasePrice());
+            item.put("total", roomType.getCount());
+            result.add(item);
         }
-        return stats;
+        return result;
     }
 
-    private List<Map<String, Object>> calcFutureStatus(Long tenantId) {
-        List<FutureRoomStatus> list = futureRoomStatusMapper.findByTenant(tenantId);
-        Map<String, Map<String, Object>> byDate = new LinkedHashMap<>();
-        for (FutureRoomStatus fs : list) {
-            String key = fs.getDate().toString();
-            Map<String, Object> day = byDate.computeIfAbsent(key, k -> {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("date", fs.getDate().toString().substring(5));
-                m.put("totalOccupied", 0);
-                m.put("totalAvailable", 0);
-                return m;
-            });
-            day.put("totalOccupied", (int) day.get("totalOccupied") + fs.getOccupied());
-            day.put("totalAvailable", (int) day.get("totalAvailable") + fs.getAvailable());
+    private Map<String, Object> readDashboard(String key) {
+        try {
+            String value = redisTemplate.opsForValue().get(key);
+            return value == null || value.isBlank()
+                ? null
+                : objectMapper.readValue(value, new TypeReference<Map<String, Object>>() {});
+        } catch (Exception ignored) {
+            return null;
         }
-        return new ArrayList<>(byDate.values());
     }
 
-    private List<Map<String, Object>> queryGuests(Long tenantId) {
-        return guestMapper.selectList(
-                query(Guest.class).eq(Guest::getTenantId, tenantId)
-                        .in(Guest::getStatus, "staying", "checking_in"))
-                .stream().map(g -> {
-                    Map<String, Object> m = new LinkedHashMap<>();
-                    m.put("roomNumber", g.getRoomNumber());
-                    m.put("guestType", g.getGuestType());
-                    m.put("source", g.getSource());
-                    m.put("nights", g.getNights());
-                    m.put("checkoutDate", g.getCheckoutDate());
-                    return m;
-                }).collect(Collectors.toList());
-    }
-
-    private <T> com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<T> query(Class<T> clz) {
-        return new com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper<>();
+    private void writeDashboard(String key, Map<String, Object> value) {
+        try {
+            redisTemplate.opsForValue().set(key, objectMapper.writeValueAsString(value), 2, TimeUnit.MINUTES);
+        } catch (Exception ignored) {
+            // Redis is an acceleration layer only.
+        }
     }
 }

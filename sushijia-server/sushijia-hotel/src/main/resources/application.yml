@@ -5,16 +5,31 @@ spring:
   application:
     name: sushijia-hotel
   datasource:
-    url: jdbc:mysql://localhost:3306/sushijia?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
-    username: root
-    password: 123456
+    url: jdbc:mysql://${MYSQL_HOST:localhost}:${MYSQL_PORT:3306}/${MYSQL_DATABASE:sushijia}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${MYSQL_USERNAME:root}
+    password: ${MYSQL_PASSWORD:123456}
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: 127.0.0.1
-      port: 6379
-      # password:
-      database: 0
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
+      database: ${REDIS_DATABASE:0}
+  servlet:
+    multipart:
+      max-file-size: 120MB
+      max-request-size: 120MB
+  mvc:
+    async:
+      request-timeout: 180000
+
+sushijia:
+  knowledge:
+    storage-path: ${SUSHIJIA_KNOWLEDGE_STORAGE:./data/knowledge}
+
+map:
+  amap:
+    key: ${AMAP_WEB_KEY:a384a53e24c9a1109fad80a75d9e339f}
 
 mybatis-plus:
   configuration:

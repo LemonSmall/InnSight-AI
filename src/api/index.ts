@@ -1,5 +1,10 @@
 import axios from 'axios'
 import { useAuthStore } from '@/stores/auth'
+import { useAdminAuthStore } from '@/stores/adminAuth'
+
+const HOTEL_ACCESS_TOKEN = 'hotel_access_token'
+const HOTEL_REFRESH_TOKEN = 'hotel_refresh_token'
+const ADMIN_ACCESS_TOKEN = 'admin_access_token'
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '',
@@ -7,33 +12,58 @@ const api = axios.create({
   headers: { 'Content-Type': 'application/json' },
 })
 
-// ====== 请求拦截器：自动带 Token ======
+function replaceLocation(path: string) {
+  if (window.location.pathname !== path) {
+    window.location.replace(path)
+  }
+}
+
 api.interceptors.request.use(config => {
-  const token = localStorage.getItem('access_token')
+  const url = config.url || ''
+  const token = url.startsWith('/api/admin')
+    ? localStorage.getItem(ADMIN_ACCESS_TOKEN)
+    : localStorage.getItem(HOTEL_ACCESS_TOKEN)
+
   if (token) {
     config.headers.Authorization = `Bearer ${token}`
   }
   return config
 })
 
-// ====== 响应拦截器：Token 过期自动刷新 ======
 let isRefreshing = false
-let refreshQueue: Array<{ resolve: (token: string) => void; reject: (err: any) => void }> = []
+let refreshQueue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []
 
 api.interceptors.response.use(
-  response => response,
+  response => {
+    const payload = response.data
+    if (payload && typeof payload.code === 'number' && payload.code !== 200) {
+      const error = new Error(payload.message || '请求失败') as any
+      error.response = response
+      error.data = payload
+      return Promise.reject(error)
+    }
+    return response
+  },
   async error => {
     const originalRequest = error.config
+    const url = originalRequest?.url || ''
+    const status = error.response?.status
 
-    // 401 且不是刷新 Token 请求本身
-    if (error.response?.status === 401 && !originalRequest._retry && !originalRequest.url?.includes('/auth/')) {
+    if (url.startsWith('/api/admin') && (status === 401 || status === 403) && !url.includes('/auth/')) {
+      const adminAuth = useAdminAuthStore()
+      adminAuth.logout()
+      replaceLocation('/admin/login')
+      return Promise.reject(error)
+    }
+
+    if (status === 401 && !originalRequest._retry && !url.includes('/auth/')) {
       originalRequest._retry = true
 
       if (!isRefreshing) {
         isRefreshing = true
         try {
-          const refreshToken = localStorage.getItem('refresh_token')
-          if (!refreshToken) throw new Error('无 refresh_token')
+          const refreshToken = localStorage.getItem(HOTEL_REFRESH_TOKEN)
+          if (!refreshToken) throw new Error('missing refresh token')
 
           const { data } = await axios.post(
             `${api.defaults.baseURL}/api/auth/token/refresh`,
@@ -41,9 +71,10 @@ api.interceptors.response.use(
           )
 
           const newAccessToken = data.data?.accessToken || data.accessToken
-          localStorage.setItem('access_token', newAccessToken)
+          localStorage.setItem(HOTEL_ACCESS_TOKEN, newAccessToken)
+          const auth = useAuthStore()
+          auth.setAccessToken(newAccessToken)
 
-          // 重放队列中的所有请求
           refreshQueue.forEach(q => q.resolve(newAccessToken))
           refreshQueue = []
 
@@ -53,23 +84,21 @@ api.interceptors.response.use(
           refreshQueue.forEach(q => q.reject(refreshError))
           refreshQueue = []
 
-          // 刷新失败 → 清除状态 → 跳登录
           const auth = useAuthStore()
           auth.logout()
-          window.location.href = '/login'
+          replaceLocation('/login')
           return Promise.reject(refreshError)
         } finally {
           isRefreshing = false
         }
-      } else {
-        // 正在刷新中，把请求排入队列等待
-        return new Promise<string>((resolve, reject) => {
-          refreshQueue.push({ resolve, reject })
-        }).then(token => {
-          originalRequest.headers.Authorization = `Bearer ${token}`
-          return api(originalRequest)
-        })
       }
+
+      return new Promise<string>((resolve, reject) => {
+        refreshQueue.push({ resolve, reject })
+      }).then(token => {
+        originalRequest.headers.Authorization = `Bearer ${token}`
+        return api(originalRequest)
+      })
     }
 
     return Promise.reject(error)

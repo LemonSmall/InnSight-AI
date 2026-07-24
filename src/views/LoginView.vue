@@ -7,24 +7,29 @@ import { Hotel, Smartphone, Lock, Loader2, Eye, EyeOff, Sparkles } from 'lucide-
 const router = useRouter()
 const auth = useAuthStore()
 
-// ====== 登录方式 ======
-const mode = ref<'phone' | 'account'>('phone')
-
-// ====== 手机号登录 ======
+const mode = ref<'phone' | 'password'>('phone')
 const phone = ref('')
 const code = ref('')
+const passwordPhone = ref('')
+const password = ref('')
+const showPassword = ref(false)
+const loading = ref(false)
 const codeSending = ref(false)
 const codeCountdown = ref(0)
+const errorMsg = ref('')
+const toast = ref('')
 let countdownTimer: ReturnType<typeof setInterval> | null = null
 
 const phoneValid = computed(() => /^1[3-9]\d{9}$/.test(phone.value))
+const passwordPhoneValid = computed(() => /^1[3-9]\d{9}$/.test(passwordPhone.value))
 
-function sendCode() {
+async function sendCode() {
   if (!phoneValid.value || codeSending.value || codeCountdown.value > 0) return
   codeSending.value = true
-  // 模拟发送
-  setTimeout(() => {
-    codeSending.value = false
+  errorMsg.value = ''
+  try {
+    await auth.sendSms(phone.value)
+    flashToast('验证码已发送')
     codeCountdown.value = 60
     countdownTimer = setInterval(() => {
       codeCountdown.value--
@@ -33,50 +38,40 @@ function sendCode() {
         countdownTimer = null
       }
     }, 1000)
-  }, 800)
+  } catch (e: any) {
+    errorMsg.value = e?.response?.data?.message || '验证码发送失败，请稍后重试'
+  } finally {
+    codeSending.value = false
+  }
 }
-
-// ====== 账号密码登录 ======
-const account = ref('')
-const password = ref('')
-const showPassword = ref(false)
-
-// ====== 登录 ======
-const loading = ref(false)
-const errorMsg = ref('')
-const toast = ref('')
 
 async function login() {
   errorMsg.value = ''
-
   if (mode.value === 'phone') {
     if (!phoneValid.value) { errorMsg.value = '请输入正确的手机号'; return }
     if (!code.value.trim()) { errorMsg.value = '请输入验证码'; return }
   } else {
-    if (!account.value.trim()) { errorMsg.value = '请输入账号'; return }
+    if (!passwordPhoneValid.value) { errorMsg.value = '请输入正确的手机号'; return }
     if (!password.value.trim()) { errorMsg.value = '请输入密码'; return }
   }
 
   loading.value = true
-
   try {
-    const loginPhone = mode.value === 'phone' ? phone.value : account.value
-    const loginCode = mode.value === 'phone' ? code.value : password.value
-
-    // 调用真实 API 登录
-    await auth.login(loginPhone, loginCode)
-    router.push('/dashboard')
+    if (mode.value === 'phone') {
+      await auth.loginByPhone(phone.value, code.value)
+    } else {
+      await auth.loginByPassword(passwordPhone.value, password.value)
+    }
+    router.replace('/dashboard')
   } catch (e: any) {
-    const msg = e?.response?.data?.message || '登录失败，请检查手机号或验证码'
-    errorMsg.value = msg
+    errorMsg.value = e?.response?.data?.message || '登录失败，请检查账号信息'
   } finally {
     loading.value = false
   }
 }
 
-// 切换模式时清除错误
-function switchMode(m: 'phone' | 'account') {
-  mode.value = m
+function switchMode(nextMode: 'phone' | 'password') {
+  mode.value = nextMode
   errorMsg.value = ''
 }
 
@@ -88,24 +83,20 @@ function flashToast(msg: string) {
 
 <template>
   <div class="min-h-screen bg-gradient-to-br from-bamboo-50 via-cream-100 to-cream-50 flex items-center justify-center p-5">
-    <!-- Toast -->
     <div v-if="toast" class="fixed top-6 right-6 z-50 bg-bamboo-800 text-white px-5 py-3 rounded-lg shadow-lg text-sm">
       {{ toast }}
     </div>
 
     <div class="w-full max-w-md">
-      <!-- Logo + Brand -->
       <div class="text-center mb-8">
         <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-bamboo-800 shadow-lg shadow-bamboo-200 mb-4">
           <Hotel class="w-8 h-8 text-cream-100" />
         </div>
-        <h1 class="text-xl font-semibold text-bamboo-900">酒店AI智慧大脑</h1>
-        <p class="text-sm text-warm-600 mt-1.5">登录以管理您的酒店营销</p>
+        <h1 class="text-xl font-semibold text-bamboo-900">宿识家 AI</h1>
+        <p class="text-sm text-warm-600 mt-1.5">登录你的酒店运营工作台</p>
       </div>
 
-      <!-- Card -->
       <div class="bg-white rounded-2xl shadow-sm border border-cream-200 p-6 space-y-5">
-        <!-- 登录方式切换 -->
         <div class="flex bg-cream-100 rounded-lg p-1 gap-1">
           <button
             @click="switchMode('phone')"
@@ -114,31 +105,30 @@ function flashToast(msg: string) {
               mode === 'phone' ? 'bg-white text-bamboo-800 shadow-sm' : 'text-warm-500 hover:text-bamboo-700'
             ]"
           >
-            <Smartphone class="w-4 h-4" />手机登录
+            <Smartphone class="w-4 h-4" />短信登录
           </button>
           <button
-            @click="switchMode('account')"
+            @click="switchMode('password')"
             :class="[
               'flex-1 py-2 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-1.5',
-              mode === 'account' ? 'bg-white text-bamboo-800 shadow-sm' : 'text-warm-500 hover:text-bamboo-700'
+              mode === 'password' ? 'bg-white text-bamboo-800 shadow-sm' : 'text-warm-500 hover:text-bamboo-700'
             ]"
           >
-            <Lock class="w-4 h-4" />账号登录
+            <Lock class="w-4 h-4" />密码登录
           </button>
         </div>
 
-        <!-- 手机号登录 -->
         <div v-if="mode === 'phone'" class="space-y-4">
           <div>
-            <label class="text-xs font-medium text-warm-700 mb-1.5 block">手机号码</label>
+            <label class="text-xs font-medium text-warm-700 mb-1.5 block">手机号</label>
             <div class="relative">
               <Smartphone class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-500" />
               <input
                 v-model="phone"
                 type="tel"
                 maxlength="11"
-                placeholder="请输入手机号"
-                class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
+                placeholder="请输入酒店员工手机号"
+                class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-bamboo-950 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
               />
             </div>
           </div>
@@ -151,8 +141,9 @@ function flashToast(msg: string) {
                   v-model="code"
                   type="text"
                   maxlength="6"
-                  placeholder="验证码"
-                  class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
+                  placeholder="请输入验证码"
+                  class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-bamboo-950 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
+                  @keyup.enter="login"
                 />
               </div>
               <button
@@ -164,24 +155,24 @@ function flashToast(msg: string) {
                   : 'bg-cream-100 text-warm-500 border-cream-300'"
               >
                 <span v-if="codeSending"><Loader2 class="w-4 h-4 animate-spin inline" /></span>
-                <span v-else-if="codeCountdown > 0">{{ codeCountdown }}s后重发</span>
+                <span v-else-if="codeCountdown > 0">{{ codeCountdown }}s</span>
                 <span v-else>获取验证码</span>
               </button>
             </div>
           </div>
         </div>
 
-        <!-- 账号密码登录 -->
-        <div v-if="mode === 'account'" class="space-y-4">
+        <div v-else class="space-y-4">
           <div>
-            <label class="text-xs font-medium text-warm-700 mb-1.5 block">账号</label>
+            <label class="text-xs font-medium text-warm-700 mb-1.5 block">手机号</label>
             <div class="relative">
               <Smartphone class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-warm-500" />
               <input
-                v-model="account"
-                type="text"
-                placeholder="请输入手机号或邮箱"
-                class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
+                v-model="passwordPhone"
+                type="tel"
+                maxlength="11"
+                placeholder="请输入酒店员工手机号"
+                class="w-full pl-9 pr-4 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-bamboo-950 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
               />
             </div>
           </div>
@@ -193,7 +184,7 @@ function flashToast(msg: string) {
                 v-model="password"
                 :type="showPassword ? 'text' : 'password'"
                 placeholder="请输入密码"
-                class="w-full pl-9 pr-10 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
+                class="w-full pl-9 pr-10 py-2.5 text-sm border border-cream-300 rounded-lg bg-cream-50 text-bamboo-950 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 focus:bg-white transition-colors"
                 @keyup.enter="login"
               />
               <button @click="showPassword = !showPassword" class="absolute right-3 top-1/2 -translate-y-1/2 text-warm-500 hover:text-bamboo-700">
@@ -204,12 +195,10 @@ function flashToast(msg: string) {
           </div>
         </div>
 
-        <!-- 错误提示 -->
         <div v-if="errorMsg" class="text-xs text-rose-500 bg-rose-50 rounded-lg px-3 py-2">
           {{ errorMsg }}
         </div>
 
-        <!-- 登录按钮 -->
         <button
           @click="login"
           :disabled="loading"
@@ -217,19 +206,13 @@ function flashToast(msg: string) {
         >
           <Loader2 v-if="loading" class="w-4 h-4 animate-spin" />
           <Sparkles v-else class="w-4 h-4" />
-          {{ loading ? '登录中...' : '登 录' }}
+          {{ loading ? '登录中...' : '登录' }}
         </button>
 
-        <!-- 底部链接 -->
         <p class="text-center text-xs text-warm-500">
-          还没有账号？<span class="text-bamboo-700 cursor-pointer hover:underline ml-1">联系管理员开通</span>
+          账号由酒店管理员或平台管理端创建，并自动绑定所属酒店。
         </p>
       </div>
-
-      <!-- Footer -->
-      <p class="text-center text-[10px] text-warm-400 mt-6">
-        &copy; 2024 酒店AI智慧大脑 · 助力酒店数字化运营
-      </p>
     </div>
   </div>
 </template>

@@ -19,7 +19,7 @@ public class DashboardController {
     private final DashboardService dashboardService;
 
     /**
-     * 获取大盘数据（KPI + 房型统计 + 在住客人）
+     * 获取酒店主动维护的基础资料与房型参考信息。
      */
     @GetMapping("/dashboard")
     public R<Map<String, Object>> getDashboard() {

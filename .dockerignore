@@ -1,0 +1,15 @@
+.git
+.idea
+.vscode
+.vite
+.agents
+.codex-*
+node_modules
+dist
+_output
+*.log
+*.err
+*.out
+*.zip
+sushijia.db
+sushijia-server/**/target

@@ -1,16 +1,22 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import api from '@/api'
 import {
+  sendSms as sendSmsApi,
+  loginByPhone as loginByPhoneApi,
+  loginByPassword as loginByPasswordApi,
   getStaffList as getStaffListApi,
   createStaff as createStaffApi,
   updateStaff as updateStaffApi,
   deleteStaff as deleteStaffApi,
+  resetStaffPassword as resetStaffPasswordApi,
   updateProfile as updateProfileApi,
   changePassword as changePasswordApi,
 } from '@/api/auth'
 
-// ====== 角色定义 ======
+const HOTEL_USER = 'hotel_user'
+const HOTEL_ACCESS_TOKEN = 'hotel_access_token'
+const HOTEL_REFRESH_TOKEN = 'hotel_refresh_token'
+
 export type Role = 'admin' | 'manager' | 'front_desk' | 'marketing'
 
 export interface Employee {
@@ -30,12 +36,11 @@ export interface UserInfo {
   avatar: string
 }
 
-// 角色可访问的模块路由
 const rolePermissions: Record<Role, string[]> = {
-  admin: ['/setup', '/rooms', '/dashboard', '/pricing', '/strategy', '/brain', '/wechat', '/xhs', '/poster', '/video', '/article', '/review', '/reply', '/checkin', '/room-status', '/credits', '/profile'],
-  manager: ['/dashboard', '/pricing', '/strategy', '/brain', '/wechat', '/xhs', '/poster', '/video', '/article', '/review', '/reply', '/checkin', '/room-status', '/credits', '/profile'],
-  front_desk: ['/review', '/reply', '/checkin', '/room-status', '/credits', '/profile'],
-  marketing: ['/wechat', '/xhs', '/poster', '/video', '/article', '/credits', '/profile'],
+  admin: ['/setup', '/rooms', '/dashboard', '/pricing', '/strategy', '/brain', '/knowledge', '/history', '/create', '/wechat', '/xhs', '/poster', '/video', '/article', '/review', '/reply', '/credits', '/profile'],
+  manager: ['/dashboard', '/pricing', '/strategy', '/brain', '/knowledge', '/history', '/create', '/wechat', '/xhs', '/poster', '/video', '/article', '/review', '/reply', '/credits', '/profile'],
+  front_desk: ['/knowledge', '/history', '/review', '/reply', '/credits', '/profile'],
+  marketing: ['/knowledge', '/history', '/create', '/wechat', '/xhs', '/poster', '/video', '/article', '/credits', '/profile'],
 }
 
 export const roleLabels: Record<Role, string> = {
@@ -45,91 +50,162 @@ export const roleLabels: Record<Role, string> = {
   marketing: '营销专员',
 }
 
-function genId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+function normalizeRole(value: unknown): Role {
+  return value === 'manager' || value === 'front_desk' || value === 'marketing' ? value : 'admin'
 }
 
-// 默认管理员
-const defaultAdmin: UserInfo = {
-  id: 'admin-001',
-  name: '张店长',
-  phone: '13800000000',
-  role: 'admin',
-  avatar: '',
+function mapEmployee(row: any): Employee {
+  return {
+    id: String(row.id),
+    name: row.name || '',
+    phone: row.phone || '',
+    role: normalizeRole(row.role),
+    avatar: row.avatar || '',
+    createdAt: row.createdAt ? String(row.createdAt).slice(0, 10) : '',
+  }
 }
 
-const defaultEmployees: Employee[] = [
-  { id: genId(), name: '李小明', phone: '13800000001', role: 'manager', avatar: '', createdAt: '2024-06-01' },
-  { id: genId(), name: '王小红', phone: '13800000002', role: 'front_desk', avatar: '', createdAt: '2024-06-05' },
-  { id: genId(), name: '赵小丽', phone: '13800000003', role: 'marketing', avatar: '', createdAt: '2024-06-10' },
-]
+function persistUser(user: UserInfo) {
+  localStorage.setItem(HOTEL_USER, JSON.stringify(user))
+}
+
+function loadUser(): UserInfo | null {
+  try {
+    const token = localStorage.getItem(HOTEL_ACCESS_TOKEN)
+    if (!isUsableToken(token)) {
+      clearStoredAuth()
+      return null
+    }
+    const data = localStorage.getItem(HOTEL_USER)
+    return data ? JSON.parse(data) : null
+  } catch {
+    return null
+  }
+}
+
+function loadToken(): string | null {
+  const token = localStorage.getItem(HOTEL_ACCESS_TOKEN)
+  if (!isUsableToken(token)) {
+    clearStoredAuth()
+    return null
+  }
+  return token
+}
+
+function clearStoredAuth() {
+  localStorage.removeItem(HOTEL_USER)
+  localStorage.removeItem(HOTEL_ACCESS_TOKEN)
+  localStorage.removeItem(HOTEL_REFRESH_TOKEN)
+  localStorage.removeItem('auth_user')
+  localStorage.removeItem('auth_token')
+  localStorage.removeItem('access_token')
+  localStorage.removeItem('refresh_token')
+}
+
+function isUsableToken(token: string | null): token is string {
+  if (!token) return false
+  const parts = token.split('.')
+  if (parts.length !== 3) return true
+  try {
+    const payload = JSON.parse(decodeURIComponent(escape(atob(parts[1].replace(/-/g, '+').replace(/_/g, '/')))))
+    const exp = Number(payload?.exp || 0)
+    return !exp || exp * 1000 > Date.now() + 30000
+  } catch {
+    return false
+  }
+}
 
 export const useAuthStore = defineStore('auth', () => {
-  // ====== 状态 ======
   const user = ref<UserInfo | null>(loadUser())
   const token = ref<string | null>(loadToken())
-  const employees = ref<Employee[]>(loadEmployees())
+  const employees = ref<Employee[]>([])
+  const employeeLoading = ref(false)
+  const error = ref('')
 
-  const isLoggedIn = computed(() => !!token.value && !!user.value)
+  const isLoggedIn = computed(() => Boolean(token.value && user.value && isUsableToken(token.value)))
   const role = computed(() => user.value?.role || null)
   const roleName = computed(() => role.value ? roleLabels[role.value] : '')
   const allowedRoutes = computed(() => role.value ? rolePermissions[role.value] : [])
 
-  // ====== 权限检查 ======
   function canAccess(path: string): boolean {
     if (!role.value) return false
-    return rolePermissions[role.value].some(r => path.startsWith(r))
+    return rolePermissions[role.value].some(route => path.startsWith(route))
   }
 
   function canManageEmployees(): boolean {
     return role.value === 'admin' || role.value === 'manager'
   }
 
-  // ====== 登录（真实API） ======
-  async function login(phone: string, code: string) {
-    const { data } = await api.post('/api/auth/login/phone', { phone, code })
-    const result = data.data || data
+  function saveLoginResult(result: any, phone: string) {
     const userInfo: UserInfo = {
-      id: 'user-' + Date.now(),
+      id: String(result.staffId || result.id || `user-${Date.now()}`),
       name: result.name || '',
-      phone: phone,
-      role: (result.role as Role) || 'admin',
-      avatar: '',
+      phone: result.phone || phone,
+      role: normalizeRole(result.role),
+      avatar: result.avatar || '',
     }
-    const authToken = result.accessToken || ''
+    const accessToken = result.accessToken || ''
 
     user.value = userInfo
-    token.value = authToken
-    localStorage.setItem('access_token', authToken)
+    token.value = accessToken
+    localStorage.setItem(HOTEL_ACCESS_TOKEN, accessToken)
     if (result.refreshToken) {
-      localStorage.setItem('refresh_token', result.refreshToken)
+      localStorage.setItem(HOTEL_REFRESH_TOKEN, result.refreshToken)
     }
-    persist('auth_user', userInfo)
-    persist('auth_token', authToken)
+    persistUser(userInfo)
     return userInfo
   }
 
-  // ====== 退出 ======
+  async function sendSms(phone: string) {
+    await sendSmsApi(phone)
+  }
+
+  async function login(phone: string, code: string) {
+    return loginByPhone(phone, code)
+  }
+
+  async function loginByPhone(phone: string, code: string) {
+    const { data } = await loginByPhoneApi(phone, code)
+    const result = data.data || data
+    return saveLoginResult(result, phone)
+  }
+
+  async function loginByPassword(phone: string, password: string) {
+    const { data } = await loginByPasswordApi(phone, password)
+    const result = data.data || data
+    return saveLoginResult(result, phone)
+  }
+
   function logout() {
     user.value = null
     token.value = null
-    localStorage.removeItem('auth_user')
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('access_token')
-    localStorage.removeItem('refresh_token')
+    employees.value = []
+    clearStoredAuth()
   }
 
-  // ====== 修改个人信息 ======
+  function setAccessToken(nextToken: string) {
+    token.value = nextToken
+    localStorage.setItem(HOTEL_ACCESS_TOKEN, nextToken)
+  }
+
   async function updateProfile(data: { name?: string; phone?: string; avatar?: string }) {
     if (!user.value) return
-    if (data.name) user.value.name = data.name
-    if (data.phone) user.value.phone = data.phone
-    if (data.avatar !== undefined) user.value.avatar = data.avatar
-    persist('auth_user', user.value)
-    try { await updateProfileApi(data) } catch { /* API 失败时本地已保存 */ }
+    error.value = ''
+    try {
+      await updateProfileApi(data)
+      user.value = {
+        ...user.value,
+        ...(data.name ? { name: data.name } : {}),
+        ...(data.phone ? { phone: data.phone } : {}),
+        ...(data.avatar !== undefined ? { avatar: data.avatar } : {}),
+      }
+      persistUser(user.value)
+    } catch {
+      error.value = '个人资料保存失败，请稍后重试'
+      throw new Error(error.value)
+    }
   }
 
-  // ====== 修改密码 ======
   async function changePassword(oldPwd: string, newPwd: string): Promise<boolean> {
     try {
       await changePasswordApi(oldPwd, newPwd)
@@ -139,97 +215,97 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  // ====== 员工管理 ======
-  /** 从后端加载员工列表 */
   async function loadEmployeesFromApi() {
+    employeeLoading.value = true
+    error.value = ''
     try {
       const { data: res } = await getStaffListApi()
       const list = res.data || res
-      if (Array.isArray(list) && list.length > 0) {
-        employees.value = list.map((e: any) => ({
-          id: String(e.id),
-          name: e.name,
-          phone: e.phone,
-          role: e.role,
-          avatar: e.avatar || '',
-          createdAt: e.createdAt || '',
-        }))
-        persist('auth_employees', employees.value)
-      }
-    } catch { /* 静默回退到本地数据 */ }
+      employees.value = Array.isArray(list) ? list.map(mapEmployee) : []
+    } catch {
+      employees.value = []
+      error.value = '员工列表加载失败，请稍后重试'
+      throw new Error(error.value)
+    } finally {
+      employeeLoading.value = false
+    }
   }
 
-  async function addEmployee(emp: Omit<Employee, 'id' | 'createdAt'>) {
+  async function addEmployee(emp: Omit<Employee, 'id' | 'createdAt'> & { password?: string }) {
+    error.value = ''
     try {
-      const { data: res } = await createStaffApi({ name: emp.name, phone: emp.phone, role: emp.role })
+      const { data: res } = await createStaffApi({
+        name: emp.name,
+        phone: emp.phone,
+        role: emp.role,
+        password: emp.password,
+      })
       const created = res.data || res
-      const newEmp: Employee = {
-        id: String(created.id),
-        name: created.name || emp.name,
-        phone: created.phone || emp.phone,
-        role: created.role || emp.role,
-        avatar: emp.avatar,
-        createdAt: created.createdAt || new Date().toISOString().slice(0, 10),
-      }
-      employees.value.push(newEmp)
-      persist('auth_employees', employees.value)
+      employees.value.push(mapEmployee({ ...emp, ...created }))
     } catch {
-      // 后端不可用时本地新增
-      const newEmp: Employee = {
-        ...emp,
-        id: genId(),
-        createdAt: new Date().toISOString().slice(0, 10),
-      }
-      employees.value.push(newEmp)
-      persist('auth_employees', employees.value)
+      error.value = '员工创建失败，请稍后重试'
+      throw new Error(error.value)
     }
   }
 
   async function removeEmployee(id: string) {
-    employees.value = employees.value.filter(e => e.id !== id)
-    persist('auth_employees', employees.value)
-    try { await deleteStaffApi(Number(id)) } catch { /* API 失败时本地已删除 */ }
+    error.value = ''
+    try {
+      await deleteStaffApi(Number(id))
+      employees.value = employees.value.filter(employee => employee.id !== id)
+    } catch {
+      error.value = '员工删除失败，请稍后重试'
+      throw new Error(error.value)
+    }
   }
 
   async function updateEmployee(id: string, data: Partial<Omit<Employee, 'id' | 'createdAt'>>) {
-    const idx = employees.value.findIndex(e => e.id === id)
-    if (idx === -1) return
-    employees.value[idx] = { ...employees.value[idx], ...data }
-    persist('auth_employees', employees.value)
+    const index = employees.value.findIndex(employee => employee.id === id)
+    if (index === -1) return
+    error.value = ''
     try {
       await updateStaffApi(Number(id), { name: data.name, phone: data.phone, role: data.role })
-    } catch { /* API 失败时本地已更新 */ }
+      employees.value[index] = { ...employees.value[index], ...data }
+    } catch {
+      error.value = '员工保存失败，请稍后重试'
+      throw new Error(error.value)
+    }
   }
 
-  // ====== 持久化 ======
-  function persist(key: string, data: unknown) {
-    try { localStorage.setItem(key, JSON.stringify(data)) } catch {}
-  }
-
-  function loadUser(): UserInfo | null {
+  async function resetEmployeePassword(id: string, newPassword: string) {
+    error.value = ''
     try {
-      const d = localStorage.getItem('auth_user')
-      return d ? JSON.parse(d) : null
-    } catch { return null }
-  }
-
-  function loadToken(): string | null {
-    // 优先从 localStorage 读取后端 access_token
-    const apiToken = localStorage.getItem('access_token')
-    return apiToken || localStorage.getItem('auth_token')
-  }
-
-  function loadEmployees(): Employee[] {
-    try {
-      const d = localStorage.getItem('auth_employees')
-      return d ? JSON.parse(d) : defaultEmployees
-    } catch { return defaultEmployees }
+      await resetStaffPasswordApi(Number(id), newPassword)
+    } catch {
+      error.value = '员工密码重置失败，请稍后重试'
+      throw new Error(error.value)
+    }
   }
 
   return {
-    user, token, employees, isLoggedIn, role, roleName, allowedRoutes,
-    canAccess, canManageEmployees,
-    login, logout, updateProfile, changePassword,
-    addEmployee, removeEmployee, updateEmployee, loadEmployeesFromApi,
+    user,
+    token,
+    employees,
+    employeeLoading,
+    error,
+    isLoggedIn,
+    role,
+    roleName,
+    allowedRoutes,
+    canAccess,
+    canManageEmployees,
+    sendSms,
+    login,
+    loginByPhone,
+    loginByPassword,
+    logout,
+    setAccessToken,
+    updateProfile,
+    changePassword,
+    addEmployee,
+    removeEmployee,
+    updateEmployee,
+    resetEmployeePassword,
+    loadEmployeesFromApi,
   }
 })

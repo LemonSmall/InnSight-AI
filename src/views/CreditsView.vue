@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useCreditsStore } from '@/stores/credits'
 import {
@@ -12,6 +12,20 @@ const store = useCreditsStore()
 
 const tab = ref<'consume' | 'recharge'>('consume')
 const searchQuery = ref('')
+const pageError = ref('')
+
+onMounted(() => {
+  reload()
+})
+
+async function reload() {
+  pageError.value = ''
+  try {
+    await store.loadFromApi()
+  } catch {
+    pageError.value = store.error || '算力数据加载失败，请稍后重试'
+  }
+}
 
 const list = computed(() => {
   const source = tab.value === 'consume' ? store.consumeRecords : store.rechargeRecords
@@ -31,7 +45,7 @@ const grouped = computed(() => {
     if (last && last.date === r.date) {
       last.items.push(r)
     } else {
-      groups.push({ date: r.date, items: [r] })
+      groups.push({ date: r.date || '未知日期', items: [r] })
     }
   }
   return groups
@@ -98,14 +112,22 @@ const grouped = computed(() => {
           v-model="searchQuery"
           type="text"
           placeholder="搜索模块或内容..."
-          class="text-[12px] pl-7 pr-3 py-1.5 rounded-lg border border-cream-300 bg-white text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 w-48"
+          class="text-[12px] pl-7 pr-3 py-1.5 rounded-lg border border-cream-300 bg-white text-bamboo-950 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 w-48"
         />
       </div>
     </div>
 
+    <div v-if="pageError" class="card border-rose-200 bg-rose-50 text-rose-700 text-sm flex items-center justify-between">
+      <span>{{ pageError }}</span>
+      <button @click="reload" class="btn-ghost text-sm">重新加载</button>
+    </div>
+
     <!-- 流水列表 -->
     <div class="card !p-0 overflow-hidden">
-      <div v-if="list.length === 0" class="py-16 text-center text-warm-500 text-sm">
+      <div v-if="store.loading" class="py-16 text-center text-warm-500 text-sm">
+        加载中...
+      </div>
+      <div v-else-if="list.length === 0" class="py-16 text-center text-warm-500 text-sm">
         暂无记录
       </div>
       <template v-else>

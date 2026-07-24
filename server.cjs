@@ -233,6 +233,159 @@ async function callAI(config, systemPrompt, userMessage) {
   return data.choices?.[0]?.message?.content || 'AI 未返回有效内容'
 }
 
+async function callAIStream(config, systemPrompt, userMessage, onChunk) {
+  if (!config.apiKey) {
+    throw new Error('AI API Key 未配置，请在管理后台或 .env 中设置 DASHSCOPE_API_KEY')
+  }
+  const resp = await fetch(`${config.baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${config.apiKey}`,
+    },
+    body: JSON.stringify({
+      model: config.model,
+      messages: [
+        { role: 'system', content: systemPrompt },
+        { role: 'user', content: userMessage },
+      ],
+      max_tokens: config.maxTokens,
+      temperature: 0.8,
+      stream: true,
+    }),
+  })
+  if (!resp.ok || !resp.body) {
+    const errText = await resp.text()
+    console.error('[AI] stream API error:', resp.status, errText)
+    throw new Error(`AI 服务返回错误: ${resp.status}`)
+  }
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder('utf-8')
+  let buffer = ''
+  let full = ''
+  const emit = chunk => {
+    const nextFull = mergeStreamText(full, chunk)
+    const delta = nextFull.startsWith(full) ? nextFull.slice(full.length) : nextFull
+    full = nextFull
+    if (delta) onChunk(delta)
+  }
+  while (true) {
+    const { value, done } = await reader.read()
+    if (done) {
+      buffer += decoder.decode()
+    } else {
+      buffer += decoder.decode(value, { stream: true })
+    }
+    const events = buffer.split(/\r?\n\r?\n/)
+    buffer = done ? '' : (events.pop() || '')
+    for (const eventText of events) {
+      for (const line of eventText.split(/\r?\n/)) {
+        if (!line.startsWith('data:')) continue
+        const data = line.slice(5).trim()
+        if (!data || data === '[DONE]') continue
+        try {
+          const parsed = JSON.parse(data)
+          const chunk = extractAIStreamText(parsed)
+          if (chunk) {
+            emit(chunk)
+          }
+        } catch { /* 忽略非 JSON 帧 */ }
+      }
+    }
+    if (done) break
+  }
+  return full || 'AI 未返回有效内容'
+}
+
+function extractAIStreamText(parsed) {
+  return parsed?.choices?.[0]?.delta?.content
+    || parsed?.choices?.[0]?.message?.content
+    || parsed?.choices?.[0]?.text
+    || parsed?.answer
+    || parsed?.text
+    || parsed?.content
+    || parsed?.message?.content
+    || parsed?.data?.answer
+    || parsed?.data?.text
+    || parsed?.data?.content
+    || parsed?.data?.delta
+    || parsed?.data?.chunk
+    || parsed?.output?.text
+    || parsed?.output?.content
+    || ''
+}
+
+function mergeStreamText(current, incoming) {
+  const next = String(incoming || '')
+  if (!next) return current
+  if (!current) return next
+  if (next === current) return current
+  if (next.startsWith(current)) return next
+  if (current.endsWith(next)) return current
+  if (next.length >= 8 && current.includes(next)) return current
+  const overlap = longestTextOverlap(current, next)
+  return overlap > 0 ? current + next.slice(overlap) : current + next
+}
+
+function longestTextOverlap(left, right) {
+  const limit = Math.min(left.length, right.length)
+  for (let size = limit; size > 0; size--) {
+    if (left.slice(-size) === right.slice(0, size)) return size
+  }
+  return 0
+}
+
+function writeSse(res, eventName, data) {
+  if (!res || res.destroyed || res.writableEnded) return false
+  try {
+    res.write(`event: ${eventName}\n`)
+    res.write(`data: ${JSON.stringify(data)}\n\n`)
+    return true
+  } catch (err) {
+    if (err && err.code !== 'ERR_STREAM_WRITE_AFTER_END') {
+      console.error('[SSE] write failed:', err.message)
+    }
+    return false
+  }
+}
+
+function endResponse(res) {
+  if (!res || res.destroyed || res.writableEnded) return
+  res.end()
+}
+
+function buildMarketingPrompts(module, tenant, inputParams = {}) {
+  const name = tenant ? tenant.name : '民宿'
+  const tags = tenant ? tenant.tags : ''
+  const systemPrompt = `你是一位专业的酒店民宿营销文案专家。你正在为「${name}」创作文案。
+酒店信息：
+- 名称：${name}
+- 类型：${tenant?.type || '精品民宿'}
+- 城市：${tenant?.city || ''}
+- 特色标签：${tags}
+- 目标客群：${tenant?.target_audience || ''}
+- 周边：${tenant?.nearby || ''}
+
+请根据以上酒店信息，创作风格独特、与酒店特色紧密结合的营销文案。不要使用通用模板，要体现这家酒店的独特魅力。`
+
+  const modulePrompts = {
+    wechat: '请生成3条朋友圈文案，分别对应：早间种草型、午间互动型、晚间促单型。每条100字以内，包含合适的emoji和话题标签。',
+    xhs: '请生成一篇小红书种草笔记，包含：吸引人的标题（20字以内）、正文（300字以内）、5-8个话题标签。要有真实体验感，避免广告感。',
+    video: '请生成一个30秒短视频口播脚本，包含：开头hook（5秒吸引停留）、中间卖点展示（20秒）、结尾行动号召（5秒）。语言口语化，有节奏感。',
+    article: '请生成一篇公众号推文（500-800字），有标题、引言、2-3个小标题段落、结尾引导。风格有质感，适合酒店品牌传播。',
+    review: '请生成3条不同角度的个性化好评模板，分别模拟情侣、家庭、商务客人的口吻。每条100字以内，真实自然，不夸张。',
+    reply: '请生成2条商家回复话术，分别针对：五星好评的感谢回复、需要挽回的差评回复。语气真诚温暖，体现酒店品牌调性。',
+    pricing: '请根据入住率、节假日、天气、竞品压力，输出酒店调价建议。优先输出 JSON，包含 summary/reasons/results 字段。',
+    brain: inputParams.message || inputParams.query || '请给出一条酒店运营建议。',
+  }
+
+  return {
+    systemPrompt,
+    userPrompt: modulePrompts[module] || '请生成营销文案',
+  }
+}
+
 // ====== apimart.ai 图片生成（GPT-Image-2） ======
 const APIMART_API_KEY = process.env.APIMART_API_KEY || ''
 const APIMART_BASE = 'https://api.apimart.ai/v1'
@@ -287,6 +440,10 @@ async function pollImageTask(taskId, maxAttempts = 24) {
   const db = await initDB()
 
   const server = http.createServer(async (req, res) => {
+    res.on('error', err => {
+      if (err && err.code === 'ERR_STREAM_WRITE_AFTER_END') return
+      console.error('[HTTP] response error:', err.message)
+    })
     if (req.method === 'OPTIONS') { res.writeHead(204, CORS); res.end(); return }
     const url = new URL(req.url, `http://${req.headers.host}`)
     const path = url.pathname
@@ -436,6 +593,76 @@ async function pollImageTask(taskId, maxAttempts = 24) {
       else if (oAdj < 0) reasons.push(`入住率偏低，下调${Math.round(Math.abs(oAdj) * 100)}%`)
       else reasons.push('入住率正常区间')
       return json(res, { results, reasons })
+    }
+
+    // ====== AI 流式内容生成 ======
+    if (path === '/api/ai/generations/stream' && req.method === 'POST') {
+      const body = await readBody(req)
+      const module = body.moduleKey || body.module
+      const inputParams = body.params || {}
+      const validModules = ['wechat', 'xhs', 'video', 'poster', 'article', 'review', 'reply', 'brain', 'pricing']
+      if (!validModules.includes(module)) {
+        res.writeHead(200, {
+          ...CORS,
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'X-Accel-Buffering': 'no',
+        })
+        writeSse(res, 'error', { message: `无效的模块: ${module}` })
+        endResponse(res)
+        return
+      }
+
+      res.writeHead(200, {
+        ...CORS,
+        'Content-Type': 'text/event-stream; charset=utf-8',
+        'Cache-Control': 'no-cache, no-transform',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no',
+      })
+
+      try {
+        writeSse(res, 'status', { message: 'AI 正在生成' })
+        const tenant = findOne(db, 'tenants', 'id', tenantId)
+        let finalContent = ''
+
+        if (module === 'poster') {
+          const name = tenant ? tenant.name : '民宿'
+          const city = tenant ? tenant.city : ''
+          const hotelTags = tenant ? tenant.tags : ''
+          const theme = inputParams.theme || inputParams.poster_theme || inputParams.prompt || ''
+          const content = inputParams.content || ''
+          const style = inputParams.style || inputParams.visual_style || 'chinese'
+          const styleMap = {
+            chinese: '中式禅意风格，深绿色调，东方美学，竹林元素，留白意境',
+            minimal: '轻奢简约风格，米白色调，简洁线条，高级质感',
+            dark: '深夜极简风格，深色调，星空元素，神秘高级感',
+            warm: '温暖治愈风格，暖色调，柔和光线，温馨氛围',
+          }
+          const prompt = inputParams.mode === 'beautify'
+            ? `美化优化这张图片：${inputParams.prompt || content}。保持原始构图和内容，提升色彩、光线和整体质感。`
+            : `为「${name}」(${city})设计一张营销海报。酒店特色：${hotelTags}。主题：${theme}。${content ? '副标题/内容：' + content + '。' : ''}视觉风格：${styleMap[style] || styleMap.chinese}。要求：专业酒店营销海报设计，精美排版，高品质画面。`
+          writeSse(res, 'status', { message: '图片生成中' })
+          const imgTaskId = await submitImageGen(prompt, inputParams.imageSize || inputParams.size || '3:4')
+          finalContent = await pollImageTask(imgTaskId)
+          writeSse(res, 'chunk', { text: finalContent })
+        } else {
+          const aiConfig = await getAIConfig(db)
+          const { systemPrompt, userPrompt } = buildMarketingPrompts(module, tenant, inputParams)
+          finalContent = await callAIStream(aiConfig, systemPrompt, userPrompt, chunk => {
+            return writeSse(res, 'chunk', { text: chunk })
+          })
+        }
+
+        writeSse(res, 'done', { content: finalContent })
+      } catch (err) {
+        console.error('[AI Stream] 生成失败:', err.message)
+        writeSse(res, 'error', { message: err.message || 'AI 调用失败' })
+      } finally {
+        endResponse(res)
+      }
+      return
     }
 
     // ====== AI 内容生成（接入通义千问） ======

@@ -27,7 +27,7 @@ public class PlanController {
     }
 
     @GetMapping("/{id}")
-    public R<MarketingPlan> detail(@PathVariable Long id) {
+    public R<MarketingPlan> detail(@PathVariable("id") Long id) {
         return R.ok(planMapper.selectById(id));
     }
 
@@ -41,7 +41,7 @@ public class PlanController {
     }
 
     @PutMapping("/{id}")
-    public R<String> update(@PathVariable Long id, @RequestBody MarketingPlan plan) {
+    public R<String> update(@PathVariable("id") Long id, @RequestBody MarketingPlan plan) {
         plan.setId(id);
         plan.setUpdatedAt(LocalDateTime.now());
         planMapper.updateById(plan);
@@ -49,7 +49,7 @@ public class PlanController {
     }
 
     @DeleteMapping("/{id}")
-    public R<String> delete(@PathVariable Long id) {
+    public R<String> delete(@PathVariable("id") Long id) {
         planMapper.deleteById(id);
         return R.ok("ok");
     }

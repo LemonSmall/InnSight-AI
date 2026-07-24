@@ -41,22 +41,30 @@ public class StaffController {
         HotelStaff staff = staffService.createStaff(
             body.get("name"),
             body.get("phone"),
-            body.get("role"));
+            body.get("role"),
+            body.get("password"));
         return R.ok(staff);
     }
 
     /** 更新员工 */
     @PutMapping("/staff/{id}")
-    public R<String> updateStaff(@PathVariable Long id, @RequestBody Map<String, String> body) {
+    public R<String> updateStaff(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
         staffService.updateStaff(id, body.get("name"), body.get("phone"), body.get("role"));
         return R.ok("更新成功");
     }
 
     /** 删除员工 */
     @DeleteMapping("/staff/{id}")
-    public R<String> deleteStaff(@PathVariable Long id) {
+    public R<String> deleteStaff(@PathVariable("id") Long id) {
         staffService.deleteStaff(id);
         return R.ok("删除成功");
+    }
+
+    /** 管理员重置员工密码 */
+    @PutMapping("/staff/{id}/password")
+    public R<String> resetStaffPassword(@PathVariable("id") Long id, @RequestBody Map<String, String> body) {
+        staffService.resetPassword(id, body.get("newPassword"));
+        return R.ok("密码已重置");
     }
 
     /** 获取个人信息 */

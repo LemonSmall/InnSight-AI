@@ -31,7 +31,7 @@ public class AdminAuthController {
             return R.fail(1002, "账户已禁用");
         }
 
-        String accessToken = JwtUtil.createAccessToken(null, null, admin.getRole(), admin.getId());
+        String accessToken = JwtUtil.createAdminAccessToken(admin.getId(), admin.getRole());
         String refreshToken = JwtUtil.createRefreshToken(null, null, admin.getRole(), admin.getId());
 
         return R.ok(Map.of(

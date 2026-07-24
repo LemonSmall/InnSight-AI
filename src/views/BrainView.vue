@@ -1,395 +1,547 @@
 <script setup lang="ts">
-import { ref, computed, nextTick, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { useRouter } from 'vue-router'
 import { useHotelStore } from '@/stores/hotel'
-import { brainChat } from '@/api/content'
+import { collectStreamContent } from '@/api/content'
+import { getGenerationHistory } from '@/api/history'
+import { buildContentAiParams } from '@/utils/aiContextParams'
+import { loadAiPageState, saveAiPageState } from '@/utils/aiPageState'
+import { renderBrainMarkdown } from '@/utils/brainMarkdown'
+import { copyTextToClipboard } from '@/utils/clipboard'
+import { promptText, resultText, type HistoryItem } from '@/utils/generationHistory'
 import {
-  Brain, ArrowUp, User, CloudRain, Sparkles,
-  Instagram, Coins, Building2, MapPin, LayoutGrid,
-  CalendarDays
+  ArrowUp,
+  Bot,
+  Brain,
+  Coins,
+  Copy,
+  Database,
+  Globe2,
+  History,
+  Layers3,
+  Lightbulb,
+  Loader2,
+  MapPin,
+  Trash2,
+  User,
+  X,
 } from 'lucide-vue-next'
 
-const hotel = useHotelStore()
-
-// ====== 聊天状态 ======
 interface Message {
   role: 'user' | 'ai'
   content: string
-  actions?: string[]
+  streaming?: boolean
 }
 
+interface BrainPageState {
+  input?: string
+  messages?: Message[]
+  enableWebSearch?: boolean
+  generating?: boolean
+  generatingStartedAt?: number
+  pendingQuestion?: string
+}
+
+const router = useRouter()
+const hotel = useHotelStore()
+const input = ref('')
+const sending = ref(false)
+const recovering = ref(false)
+const enableWebSearch = ref(false)
+const clearDialogOpen = ref(false)
+const chatContainer = ref<HTMLElement | null>(null)
+const toast = ref('')
+const pageStateKey = 'brain'
+const GENERATING_STALE_MS = 5 * 60 * 1000
+const RECOVER_TIMEOUT_MS = 4 * 60 * 1000
+let recoverTimer: ReturnType<typeof window.setInterval> | null = null
+const currentRequestStartedAt = ref(0)
+const pendingQuestion = ref('')
 const messages = ref<Message[]>([
   {
     role: 'ai',
-    content: `你好！我是 **${hotel.config.name}** 的**运营智慧大脑**，已加载你的民宿所有运营上下文——房态、天气、节假日、客群特征、竞争环境。
-
-你可以直接问我任何运营问题，比如：
-<span class="tag tg">今天怎么卖房</span>
-<span class="tag to">端午定价策略</span>
-<span class="tag tp">小红书内容方向</span>
-<span class="tag tb">差评怎么回</span>
-<span class="tag tr">暑假如何备战</span>
-
-说出你现在最头疼的运营问题吧。`,
+    content: '你好，我是宿识家 AI 店长。你可以直接问经营问题，我会结合本店资料、房型和历史房态数据给出建议。',
   },
 ])
 
-const input = ref('')
-const sending = ref(false)
-const typing = ref(false)
-const chatContainer = ref<HTMLElement | null>(null)
+function persistState() {
+  saveAiPageState<BrainPageState>(pageStateKey, {
+    input: input.value,
+    messages: messages.value.map(message => ({
+      ...message,
+      streaming: Boolean(message.streaming && (sending.value || recovering.value)),
+    })),
+    enableWebSearch: enableWebSearch.value,
+    generating: sending.value || recovering.value,
+    generatingStartedAt: sending.value || recovering.value ? (currentRequestStartedAt.value || Date.now()) : 0,
+    pendingQuestion: pendingQuestion.value,
+  })
+}
 
-// ====== 系统提示词 ======
-const systemPrompt = computed(() => {
-  const cfg = hotel.config
-  const rts = hotel.roomTypes
-  const occ = hotel.occupancyRate
-  const free = hotel.totalRooms - hotel.totalSold
-  const sold = hotel.totalSold
+function restoreState() {
+  const restored = loadAiPageState<BrainPageState>(pageStateKey)
+  const canRestoreGenerating = Boolean(restored?.generating && restored.generatingStartedAt && Date.now() - restored.generatingStartedAt < GENERATING_STALE_MS)
+  currentRequestStartedAt.value = canRestoreGenerating ? Number(restored?.generatingStartedAt || 0) : 0
+  pendingQuestion.value = canRestoreGenerating ? String(restored?.pendingQuestion || '') : ''
+  if (restored?.messages?.length) {
+    messages.value = restored.messages
+      .map(message => ({
+        role: message.role,
+        content: String(message.content || ''),
+        streaming: Boolean(message.streaming && canRestoreGenerating),
+      }))
+      .filter(message => message.role === 'user' || message.content.trim() || message.streaming)
+  }
+  input.value = typeof restored?.input === 'string' ? restored.input : ''
+  enableWebSearch.value = Boolean(restored?.enableWebSearch)
+  if (canRestoreGenerating && messages.value.some(message => message.role === 'ai' && message.streaming)) {
+    recovering.value = true
+    startRecoverPolling()
+  }
+}
 
-  let roomsDesc = rts.map(r => `${r.name}（¥${r.basePrice}基础价，${r.count}间）`).join('、')
+watch([messages, input, enableWebSearch], persistState, { deep: true })
 
-  return `你是"${cfg.name}"的运营智慧大脑，一个专为民宿运营打造的AI智能体。
-
-【民宿基础信息】
-- 名称：${cfg.name}（${cfg.type}）
-- 位置：${cfg.city}
-- 核心特色：${cfg.tags}
-- 目标客群：${cfg.targetAudience}
-- 周边资源：${cfg.nearby}
-- 房型：${roomsDesc}
-
-【今日实时数据】
-- 今日出租率：${occ}%，已售${sold}间，空余${free}间，维修${cfg.totalRooms - sold - free}间
-- RevPAR：¥${hotel.revpar}
-- 日期：周四
-
-【你的角色与能力】
-你是一个深度理解酒店/民宿运营的AI智能体，能够：
-1. 基于实时房态、天气、节假日给出即时运营策略
-2. 提供各平台（小红书、抖音、朋友圈、美团/携程）的内容创作指导
-3. 给出动态定价建议和收益管理策略
-4. 分析营销机会，制定推广方案
-5. 提供客户服务话术、好评引导策略
-6. 识别运营风险并给出预案
-
-【回答风格】
-- 语言简洁、实操性强，直接给出可执行的动作
-- 结合民宿的具体特色给出个性化建议
-- 每次回答聚焦在3-5个核心要点
-- 用中文回复，语气专业但亲切
-- 回答结构清晰，适当使用换行和要点罗列
-- 不超过300字，精炼有力`
+const hotelTags = computed(() => String(hotel.config.tags || '').split(/[,，、\s]+/).map(item => item.trim()).filter(Boolean).slice(0, 5))
+const displayCity = computed(() => {
+  if (hotel.config.poiCity) return hotel.config.poiCity
+  const parts = String(hotel.config.city || '').split('/').map(item => item.trim()).filter(Boolean)
+  return parts[1] || parts[0] || '-'
+})
+const contextCards = computed(() => [
+  { label: '城市', value: displayCity.value, icon: MapPin },
+  { label: '酒店类型', value: hotel.config.type || '-', icon: Bot },
+  { label: '房型资料', value: `${hotel.roomTypes.length} 项`, icon: Layers3 },
+])
+const occupancyCard = computed(() => {
+  const data = hotel.occupancyImport
+  if (!data) {
+    return {
+      rate: '待上传',
+      range: '基础信息页上传历史房态表后启用',
+      summary: 'AI 店长会优先使用已上传的房型占用、剩余可售和出租率数据。',
+    }
+  }
+  return {
+    rate: `${Math.round(data.averageOccupancyRate * 100)}%`,
+    range: data.dateRange || '已上传周期',
+    summary: hotel.occupancySummaryText,
+  }
 })
 
-// ====== 模拟 AI 响应 ======
-const responses: Record<string, string> = {
-  default: `根据 **${hotel.config.name}** 当前情况，以下是我的运营建议：
-
-**1. 即时行动**
-今天出租率 **${hotel.occupancyRate}%**，还有 **${hotel.totalRooms - hotel.totalSold}** 间空房。建议对空房做限时折扣，通过朋友圈和民宿社群发布"今夜特价"。
-
-**2. 内容营销**
-结合 **${hotel.config.tags?.split('、').slice(0, 2).join('、')}** 的特色，拍摄短视频发小红书，配上真实客人体验。
-
-**3. 客户运营**
-对即将到店的客人提前发送天气提醒和出行攻略，提升入住体验和好评率。
-
-**4. 数据关注**
-持续监控未来7天预订趋势，周末房源紧张时适当提价，平日做促销补量。`,
-
-  rain: `今天**下雨天**，是转化犹豫客户的好时机：
-
-**1. 雨天专属优惠**
-推出"听雨·私汤"套餐——温泉+有机茶歇+竹林雨景拍照，定价 ¥598/人，限时3小时。
-
-**2. 内容角度**
-- 小红书："莫干山最美雨天，竹林听雨泡私汤"
-- 朋友圈：发民宿窗景雨滴特写 + 温馨内景对比
-
-**3. 到店服务**
-大堂备好姜茶、烘干机、雨伞，给客人"被照顾到"的惊喜感。
-
-**4. 定价调整**
-雨天退订率上升，今晚空房建议降价20%走量，保证入住率。`,
-
-  festival: `围绕**端午假期的营销优先级**，建议如下：
-
-**🔥 第一优先级：渠道冲量**
-- 携程/美团：端午专题页上线，首图突出"粽享山野"
-- 投放"端午不加价"标签吸引比价用户
-
-**📱 第二优先级：内容种草**
-- 小红书：发布"端午莫干山避暑攻略"，植入民宿
-- 抖音：15秒短视频"包粽子体验+无边泳池"
-
-**🎯 第三优先级：私域转化**
-- 朋友圈3天倒计时海报："端午还有X间"
-- 老客群发：端午专属折扣码，限量5张
-
-**💰 定价策略**
-端午假期（5.31-6.2）基础价上浮30%，提前7天预付优惠15%。`,
-
-  xhs: `针对 **${hotel.config.name}** 的小红书差异化打法：
-
-**1. 差异化定位**
-不打"最美民宿"这种通用卖点。聚焦 **${hotel.config.tags?.split('、')[0]}** 这个独特标签，打造"莫干山唯一竹林私汤民宿"心智。
-
-**2. 内容矩阵**
-- 攻略型："莫干山2天1夜怎么玩"（软植入）
-- 体验型："在竹林里泡温泉是什么体验"（沉浸感）
-- 知识型："民宿老板教你选房型"（专业度）
-
-**3. 视觉风格**
-走"侘寂+竹林"调性——低饱和度、自然光影、留白构图。区别于竞争民宿的网红ins风。
-
-**4. KOC策略**
-邀请5位生活方式博主免费体验，产出真实探店内容，比头部KOL投放更高效。`,
-
-  pricing: `针对今晚空房的**动态定价建议**：
-
-**当前状态**
-出租率 ${hotel.occupancyRate}%，空${hotel.totalRooms - hotel.totalSold}间
-
-**定价策略**
-${hotel.occupancyRate >= 90 ? '出租率已超90%，剩余房间维持原价，可搭配升级服务提升客单价。' : hotel.occupancyRate >= 70 ? '出租率中位，建议剩余房间降价15-20%做闪购，晚上8点前未售出再加码。' : '出租率偏低，立即启动"今夜特价"策略，价格下调30%，覆盖基础成本即可。'}
-
-**执行动作**
-1. 在携程/美团开启今夜特价标签
-2. 朋友圈发布"今晚最后一间"文案
-3. 民宿社群推送限时折扣码
-
-**注意**
-不要低于日常价的50%，以免伤害品牌定位。`,
-}
-
-function getAIResponse(q: string): string {
-  const ql = q.toLowerCase()
-  if (ql.includes('雨') || ql.includes('空房') || ql.includes('天气')) return responses.rain
-  if (ql.includes('端午') || ql.includes('节日') || ql.includes('营销优先级') || ql.includes('假期')) return responses.festival
-  if (ql.includes('小红书') || ql.includes('差异化') || ql.includes('打法') || ql.includes('内容')) return responses.xhs
-  if (ql.includes('定价') || ql.includes('价格') || ql.includes('空房') && ql.includes('今晚')) return responses.pricing
-  return responses.default
-}
-
-// ====== 快捷问题 ======
-const quickQuestions = [
-  { icon: CloudRain, title: '雨天空房怎么办', desc: '结合今日天气给出即时策略', q: '今天雨天空了2间房，我现在应该怎么做？' },
-  { icon: Sparkles, title: '端午营销优先级', desc: '节假日作战顺序规划', q: '端午节3天我应该重点做哪些营销动作？优先级怎么排？' },
-  { icon: Instagram, title: '小红书差异化打法', desc: '基于自身特色的内容策略', q: '我们民宿的竞争优势是什么？怎么在小红书上差异化打法？' },
-  { icon: Coins, title: '今晚空房定价建议', desc: '实时房态驱动定价决策', q: `现在出租率${hotel.occupancyRate}%，今晚还有${hotel.totalRooms - hotel.totalSold}间空房，定价应该怎么调？` },
+const sideLinks = [
+  { label: 'AI 店长历史', desc: '查看过往经营问答', route: '/history/brain', icon: History },
+  { label: '知识库', desc: '维护本店资料', route: '/knowledge', icon: Database },
+  { label: '营销策略', desc: '生成周期作战方案', route: '/strategy', icon: Lightbulb },
+  { label: '定价建议', desc: '按条件生成调价方案', route: '/pricing', icon: Coins },
 ]
 
-// ====== 发送消息 ======
 async function send() {
-  const text = input.value.trim()
-  if (!text || sending.value) return
-
+  const question = input.value.trim()
+  if (!question || sending.value) return
   input.value = ''
   sending.value = true
+  recovering.value = false
+  currentRequestStartedAt.value = Date.now()
+  pendingQuestion.value = question
+  messages.value.push({ role: 'user', content: question })
+  const aiIndex = messages.value.push({ role: 'ai', content: '', streaming: true }) - 1
+  persistState()
+  await scrollAfterRender()
 
-  // 添加用户消息
-  messages.value.push({ role: 'user', content: text })
-
-  typing.value = true
-  await nextTick()
-  scrollToBottom()
-
-  // 调用后端 AI
   try {
-    const { data: res } = await brainChat(text)
-    const d = res.data || res
-    typing.value = false
-    const reply = d.content || getAIResponse(text)
-    const suggestions = d.suggestions || getSuggestions(text, reply)
-    messages.value.push({ role: 'ai', content: reply, actions: suggestions })
-  } catch {
-    typing.value = false
-    const reply = getAIResponse(text)
-    const suggestions = getSuggestions(text, reply)
-    messages.value.push({ role: 'ai', content: reply, actions: suggestions })
+    const params = buildContentAiParams(hotel, 'brain', {
+      message: question,
+      userQuestion: question,
+      requireKnowledge: true,
+      enableWebSearch: enableWebSearch.value,
+      outputStyle: 'concise_actionable',
+    })
+    const content = await collectStreamContent('brain', params, {
+      timeoutMs: 3 * 60 * 1000,
+      onChunk(_chunk, streamedContent) {
+        const target = messages.value[aiIndex]
+        if (!target) return
+        target.content = streamedContent
+        persistState()
+        scrollToBottom()
+      },
+    })
+    messages.value[aiIndex] = { role: 'ai', content: content || 'AI 暂时没有返回内容，请稍后重试。' }
+  } catch (error: any) {
+    messages.value[aiIndex] = { role: 'ai', content: error?.message || 'AI 调用失败，请稍后重试。' }
+  } finally {
+    sending.value = false
+    recovering.value = false
+    pendingQuestion.value = ''
+    currentRequestStartedAt.value = 0
+    stopRecoverPolling()
+    persistState()
+    await scrollAfterRender()
   }
+}
 
+function startRecoverPolling() {
+  stopRecoverPolling()
+  void recoverLatestBrainResult()
+  recoverTimer = window.setInterval(() => {
+    void recoverLatestBrainResult()
+  }, 2000)
+}
+
+function stopRecoverPolling() {
+  if (!recoverTimer) return
+  window.clearInterval(recoverTimer)
+  recoverTimer = null
+}
+
+async function recoverLatestBrainResult() {
+  if (!recovering.value) return
+  if (currentRequestStartedAt.value && Date.now() - currentRequestStartedAt.value > RECOVER_TIMEOUT_MS) {
+    finishRecoverWithFallback()
+    return
+  }
+  try {
+    const res = await getGenerationHistory('brain', 8)
+    const list = unwrapHistoryList(res)
+    const candidate = list.find(item => isRecoverCandidate(item))
+    if (!candidate) return
+    const content = resultText(candidate)
+    if (!content || content === '暂无内容') return
+    replaceStreamingMessage(content)
+    recovering.value = false
+    sending.value = false
+    pendingQuestion.value = ''
+    currentRequestStartedAt.value = 0
+    stopRecoverPolling()
+    persistState()
+    await scrollAfterRender()
+  } catch {
+    // Keep polling until timeout; the history endpoint may briefly lag generation.
+  }
+}
+
+function unwrapHistoryList(res: any): HistoryItem[] {
+  const payload = res?.data?.data || res?.data || res
+  const list = Array.isArray(payload) ? payload : Array.isArray(payload?.records) ? payload.records : []
+  return list.filter((item: any) => (item?.moduleKey || item?.module_key) === 'brain')
+}
+
+function isRecoverCandidate(item: HistoryItem) {
+  if (!/done|success|completed/i.test(String(item.status || ''))) return false
+  const createdAt = historyTime(item.completedAt || item.createdAt)
+  if (currentRequestStartedAt.value && createdAt && createdAt < currentRequestStartedAt.value - 15000) return false
+  const question = pendingQuestion.value.trim()
+  if (!question) return true
+  const prompt = promptText(item)
+  const normalizedPrompt = normalizeRecoverText(prompt)
+  const normalizedQuestion = normalizeRecoverText(question)
+  return Boolean(normalizedPrompt && normalizedQuestion && (normalizedPrompt.includes(normalizedQuestion) || normalizedQuestion.includes(normalizedPrompt)))
+}
+
+function replaceStreamingMessage(content: string) {
+  const reversedIndex = [...messages.value].reverse().findIndex(message => message.role === 'ai' && message.streaming)
+  const targetIndex = reversedIndex < 0 ? -1 : messages.value.length - 1 - reversedIndex
+  if (targetIndex >= 0) {
+    messages.value[targetIndex] = { role: 'ai', content }
+  } else {
+    messages.value.push({ role: 'ai', content })
+  }
+}
+
+function finishRecoverWithFallback() {
+  replaceStreamingMessage('这次生成还没有同步到结果。可以稍后在 AI 店长历史里查看，或者重新发送一次。')
+  recovering.value = false
+  sending.value = false
+  pendingQuestion.value = ''
+  currentRequestStartedAt.value = 0
+  stopRecoverPolling()
+  persistState()
+}
+
+function normalizeRecoverText(value: string) {
+  return String(value || '').replace(/\s+/g, '').slice(0, 80)
+}
+
+function historyTime(value?: string) {
+  if (!value) return 0
+  const time = new Date(value.replace(' ', 'T')).getTime()
+  return Number.isFinite(time) ? time : 0
+}
+
+function requestClear() {
+  if (!sending.value) clearDialogOpen.value = true
+}
+
+function confirmClear() {
+  messages.value = [{
+    role: 'ai',
+    content: '对话已清空。你可以继续问我经营、定价、营销或房型表现相关问题。',
+  }]
+  clearDialogOpen.value = false
+  persistState()
+  flash('对话已清空')
+}
+
+async function copyMessage(content: string) {
+  const ok = await copyTextToClipboard(content)
+  flash(ok ? '已复制' : '复制失败')
+}
+
+function renderMarkdown(content: string) {
+  return renderBrainMarkdown(content)
+}
+
+function flash(message: string) {
+  toast.value = message
+  window.setTimeout(() => (toast.value = ''), 1500)
+}
+
+async function scrollAfterRender() {
   await nextTick()
   scrollToBottom()
-  sending.value = false
 }
 
-function askQ(q: string) {
-  input.value = q
-  send()
-}
-
-// ====== 建议追问 ======
-function getSuggestions(q: string, reply: string): string[] {
-  const pool = [
-    '帮我写今天的朋友圈文案',
-    '端午海报文案怎么写',
-    '今晚空房如何定价',
-    '小红书选题推荐',
-    '怎么引导客人好评',
-    '暑假营销怎么准备',
-    '差评该怎么回复',
-    '抖音口播文案生成',
-    '如何设计端午套餐',
-    '私域客户怎么运营',
-  ]
-  return pool
-    .filter(s => !q.includes(s.slice(0, 4)) && !reply.includes(s.slice(0, 4)))
-    .slice(0, 3)
+async function scrollAfterRestore() {
+  await nextTick()
+  scrollToBottom()
+  window.requestAnimationFrame(() => {
+    scrollToBottom()
+    window.setTimeout(scrollToBottom, 80)
+  })
 }
 
 function scrollToBottom() {
-  if (chatContainer.value) {
-    chatContainer.value.scrollTop = chatContainer.value.scrollHeight
-  }
+  if (chatContainer.value) chatContainer.value.scrollTop = chatContainer.value.scrollHeight
 }
 
-// ====== 格式化文本 ======
-function formatContent(content: string): string {
-  return content
-    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-    .replace(/\n/g, '<br>')
-}
+onMounted(async () => {
+  restoreState()
+  if (!hotel.config.name) hotel.loadFromApi().catch(() => {})
+  await scrollAfterRestore()
+})
+
+onBeforeUnmount(() => {
+  stopRecoverPolling()
+})
 </script>
 
 <template>
-  <div class="h-full flex flex-col">
-    <!-- 头部 -->
-    <div class="flex items-center gap-3 mb-4">
-      <div class="w-10 h-10 rounded-full bg-bamboo-50 flex items-center justify-center flex-shrink-0">
-        <Brain class="w-5 h-5 text-bamboo-800" />
+  <div class="h-[calc(100vh-116px)] min-h-[650px] overflow-hidden">
+    <transition name="toast">
+      <div v-if="toast" class="fixed right-6 top-6 z-50 rounded-xl bg-bamboo-900 px-4 py-2 text-sm text-bamboo-50 shadow-xl">
+        {{ toast }}
       </div>
-      <div>
-        <div class="text-sm font-medium text-warm-900">运营智慧大脑</div>
-        <div class="text-[11px] text-bamboo-800 flex items-center gap-1 mt-0.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-bamboo-600 flex-shrink-0" />
-          已加载 {{ hotel.config.name }} 运营知识库
-        </div>
-      </div>
-    </div>
+    </transition>
 
-    <!-- 上下文栏 -->
-    <div class="flex gap-2 flex-wrap mb-3 px-3 py-2.5 bg-white rounded-lg border border-cream-300/60 text-[11px] text-warm-600">
-      <div class="flex items-center gap-1">
-        <Building2 class="w-3 h-3" />
-        {{ hotel.config.name }}
-      </div>
-      <span class="text-cream-400">·</span>
-      <div class="flex items-center gap-1">
-        <MapPin class="w-3 h-3" />
-        {{ hotel.config.city?.replace('浙江·', '') }}
-      </div>
-      <span class="text-cream-400">·</span>
-      <div class="flex items-center gap-1">
-        <LayoutGrid class="w-3 h-3" />
-        出租率 {{ hotel.occupancyRate }}%
-      </div>
-      <span class="text-cream-400">·</span>
-      <div class="flex items-center gap-1">
-        <CloudRain class="w-3 h-3" />
-        今日小雨
-      </div>
-      <span class="text-cream-400">·</span>
-      <div class="flex items-center gap-1">
-        <CalendarDays class="w-3 h-3" />
-        距端午 3 天
-      </div>
-    </div>
-
-    <!-- 快捷问题 -->
-    <div class="mb-3">
-      <div class="text-[10px] font-semibold text-warm-500 tracking-wider mb-2 uppercase">快捷问题</div>
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        <button
-          v-for="qq in quickQuestions"
-          :key="qq.title"
-          @click="askQ(qq.q)"
-          class="text-left bg-white border border-cream-300/60 rounded-lg px-3 py-2.5 hover:border-bamboo-400 hover:bg-bamboo-50 transition-all duration-150 group"
-        >
-          <component :is="qq.icon" class="w-4 h-4 text-warm-500 group-hover:text-bamboo-700 mb-1" />
-          <div class="text-xs font-medium text-warm-800 group-hover:text-bamboo-900">{{ qq.title }}</div>
-          <div class="text-[11px] text-warm-500 mt-0.5">{{ qq.desc }}</div>
-        </button>
-      </div>
-    </div>
-
-    <!-- 分割线 -->
-    <div class="border-b border-cream-200/60 mb-3" />
-
-    <!-- 聊天区域 -->
-    <div ref="chatContainer" class="flex-1 overflow-y-auto space-y-3 min-h-0 pr-1">
-      <div
-        v-for="(msg, i) in messages"
-        :key="i"
-        :class="['flex gap-2.5 items-start', msg.role === 'user' && 'flex-row-reverse']"
-      >
-        <!-- 头像 -->
-        <div
-          :class="[
-            'w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0',
-            msg.role === 'ai' ? 'bg-bamboo-50 text-bamboo-800' : 'bg-indigo-50 text-indigo-700'
-          ]"
-        >
-          <Brain v-if="msg.role === 'ai'" class="w-3.5 h-3.5" />
-          <User v-else class="w-3.5 h-3.5" />
+    <section class="brain-shell grid h-full min-h-0 gap-5">
+      <aside class="brain-sidebar flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-cream-300 bg-white shadow-sm">
+        <div class="bg-bamboo-950 p-5 text-bamboo-50">
+          <div class="flex items-center gap-4">
+            <div class="flex h-12 w-12 items-center justify-center rounded-2xl bg-bamboo-100 text-bamboo-950">
+              <Brain class="h-6 w-6" />
+            </div>
+            <div>
+              <div class="text-xl font-semibold">AI 店长</div>
+              <div class="mt-0.5 text-sm text-bamboo-100/70">经营问答工作台</div>
+            </div>
+          </div>
+          <button class="mt-4 inline-flex items-center gap-2 rounded-2xl bg-bamboo-100 px-4 py-2.5 text-sm font-semibold text-bamboo-950 hover:bg-white" @click="router.push('/knowledge')">
+            <Database class="h-4 w-4" />
+            更新本店资料
+          </button>
         </div>
 
-        <!-- 气泡 -->
-        <div
-          :class="[
-            'max-w-[82%] px-3 py-2.5 rounded-lg text-[13px] leading-relaxed',
-            msg.role === 'ai'
-              ? 'bg-white border border-cream-300/60 rounded-tl-sm text-warm-800'
-              : 'bg-bamboo-50 border border-bamboo-200 rounded-tr-sm text-bamboo-950'
-          ]"
-        >
-          <div v-html="formatContent(msg.content)" />
+        <div class="border-b border-cream-200 p-4">
+          <h2 class="text-base font-semibold text-bamboo-950">本店上下文</h2>
+          <div class="mt-3 rounded-2xl bg-cream-50 p-3">
+            <div class="truncate text-sm font-semibold text-bamboo-950">{{ hotel.config.name || '未设置酒店名称' }}</div>
+            <div class="mt-1 text-xs text-warm-500">{{ hotel.config.type || '未设置类型' }}</div>
+          </div>
+          <div class="mt-3 grid grid-cols-3 gap-2">
+            <div v-for="card in contextCards" :key="card.label" class="rounded-2xl bg-cream-50 p-2.5">
+              <component :is="card.icon" class="h-4 w-4 text-bamboo-700" />
+              <div class="mt-1 truncate text-sm font-semibold text-bamboo-950">{{ card.value }}</div>
+              <div class="text-[11px] text-warm-500">{{ card.label }}</div>
+            </div>
+          </div>
+          <div class="mt-3 rounded-2xl border border-bamboo-100 bg-bamboo-50 p-3">
+            <div class="flex items-center justify-between gap-3">
+              <div class="flex items-center gap-2 text-xs font-semibold text-bamboo-900">
+                <Layers3 class="h-3.5 w-3.5" />
+                历史出租率
+              </div>
+              <span class="rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-bamboo-800">{{ occupancyCard.rate }}</span>
+            </div>
+            <div class="mt-2 text-[11px] text-warm-500">{{ occupancyCard.range }}</div>
+            <p class="mt-1 line-clamp-2 text-xs leading-5 text-warm-600">{{ occupancyCard.summary }}</p>
+          </div>
+          <div class="mt-3 flex flex-wrap gap-1.5">
+            <span v-for="tag in hotelTags" :key="tag" class="rounded-full bg-bamboo-100 px-2 py-0.5 text-[11px] font-medium text-bamboo-800">{{ tag }}</span>
+            <span v-if="!hotelTags.length" class="text-xs text-warm-500">暂无标签</span>
+          </div>
+        </div>
 
-          <!-- 追问按钮 -->
-          <div v-if="msg.actions && msg.actions.length" class="flex gap-1.5 flex-wrap mt-2 pt-2 border-t border-cream-200/60">
-            <button
-              v-for="act in msg.actions"
-              :key="act"
-              @click="askQ(act)"
-              class="text-[11px] px-2.5 py-1 rounded-full border border-cream-300 bg-cream-50 text-warm-600 hover:bg-bamboo-50 hover:text-bamboo-800 hover:border-bamboo-400 transition-colors"
-            >
-              {{ act }}
+        <div class="p-4">
+          <h2 class="text-base font-semibold text-bamboo-950">常用入口</h2>
+          <div class="mt-3 grid gap-2">
+            <button v-for="link in sideLinks" :key="link.route" class="flex w-full min-w-0 items-center gap-3 rounded-2xl border border-cream-200 bg-white p-3 text-left transition hover:border-bamboo-300 hover:bg-bamboo-50" @click="router.push(link.route)">
+              <span class="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-xl bg-bamboo-50 text-bamboo-800">
+                <component :is="link.icon" class="h-4 w-4" />
+              </span>
+              <span class="min-w-0">
+                <span class="block truncate text-sm font-semibold text-bamboo-950">{{ link.label }}</span>
+                <span class="block truncate text-[11px] text-warm-500">{{ link.desc }}</span>
+              </span>
             </button>
           </div>
         </div>
-      </div>
+      </aside>
 
-      <!-- 打字动画 -->
-      <div v-if="typing" class="flex gap-2.5 items-start">
-        <div class="w-7 h-7 rounded-full bg-bamboo-50 text-bamboo-800 flex items-center justify-center flex-shrink-0">
-          <Brain class="w-3.5 h-3.5" />
+      <section class="brain-chat flex min-h-0 flex-col overflow-hidden rounded-[28px] border border-cream-300 bg-white shadow-sm">
+        <div class="flex flex-shrink-0 items-center justify-between gap-4 border-b border-cream-200 px-6 py-4">
+          <div>
+            <h1 class="text-xl font-semibold text-bamboo-950">经营问答</h1>
+            <p class="mt-1 text-sm text-warm-500">把当前问题直接发给 AI 店长。</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <label class="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-cream-300 bg-white px-3 py-2 text-xs font-semibold text-warm-600 hover:border-bamboo-300 hover:bg-bamboo-50">
+              <input v-model="enableWebSearch" type="checkbox" class="h-4 w-4 accent-bamboo-700" :disabled="sending" />
+              <Globe2 class="h-3.5 w-3.5" />
+              <span>{{ enableWebSearch ? '联网搜索开' : '联网搜索关' }}</span>
+            </label>
+            <button class="inline-flex items-center gap-1.5 rounded-xl border border-cream-300 bg-white px-3 py-2 text-xs font-semibold text-warm-600 hover:border-red-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50" :disabled="sending" @click="requestClear">
+              <Trash2 class="h-3.5 w-3.5" />
+              清空
+            </button>
+          </div>
         </div>
-        <div class="bg-white border border-cream-300/60 rounded-lg rounded-tl-sm px-3 py-2.5 flex items-center gap-1.5">
-          <span class="w-1.5 h-1.5 rounded-full bg-warm-400 animate-pulse" />
-          <span class="w-1.5 h-1.5 rounded-full bg-warm-400 animate-pulse" style="animation-delay: 0.2s" />
-          <span class="w-1.5 h-1.5 rounded-full bg-warm-400 animate-pulse" style="animation-delay: 0.4s" />
-        </div>
-      </div>
-    </div>
 
-    <!-- 输入区域 -->
-    <div class="flex gap-2 pt-3 border-t border-cream-200/60 mt-3">
-      <input
-        v-model="input"
-        type="text"
-        placeholder="问我任何运营问题，比如：今天怎么促销空房？"
-        class="flex-1 text-[13px] px-3 py-2 rounded-lg border border-cream-300 bg-white text-warm-800 placeholder:text-warm-400 focus:outline-none focus:border-bamboo-400 transition-colors"
-        :disabled="sending"
-        @keydown.enter="send"
-      />
-      <button
-        @click="send"
-        :disabled="sending || !input.trim()"
-        class="px-4 py-2 rounded-lg bg-bamboo-800 text-bamboo-100 text-[13px] font-medium flex items-center gap-1.5 hover:bg-bamboo-900 disabled:bg-cream-200 disabled:text-warm-400 disabled:cursor-not-allowed transition-colors flex-shrink-0"
-      >
-        <ArrowUp class="w-3.5 h-3.5" />
-        发送
-      </button>
+        <div ref="chatContainer" class="min-h-0 flex-1 space-y-5 overflow-y-auto bg-cream-50/70 p-6">
+          <div v-for="(msg, index) in messages" :key="index" :class="['flex gap-3', msg.role === 'user' ? 'justify-end' : 'justify-start']">
+            <div v-if="msg.role === 'ai'" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-bamboo-900 text-bamboo-50">
+              <Bot class="h-5 w-5" />
+            </div>
+            <article :class="['max-w-[900px] rounded-[22px] px-5 py-4 text-[15px] leading-7 shadow-sm', msg.role === 'ai' ? 'border border-cream-200 bg-white text-bamboo-950' : 'bg-bamboo-900 text-bamboo-50']">
+              <template v-if="msg.role === 'ai'">
+                <div v-if="msg.content" v-html="renderMarkdown(msg.content)" />
+                <div v-else-if="msg.streaming" class="brain-typing">
+                  <span>{{ recovering ? '正在同步生成结果' : 'AI 店长正在生成回复' }}</span>
+                  <i />
+                  <i />
+                  <i />
+                </div>
+                <div v-if="msg.streaming && msg.content" class="brain-streaming-note">
+                  <span>{{ recovering ? '正在同步结果' : '生成中' }}</span>
+                  <i />
+                  <i />
+                  <i />
+                </div>
+              </template>
+              <div v-else class="whitespace-pre-wrap">{{ msg.content }}</div>
+              <div v-if="msg.role === 'ai' && !msg.streaming" class="mt-4 flex flex-wrap items-center gap-2 border-t border-cream-200 pt-3">
+                <button class="inline-flex items-center gap-1.5 rounded-full border border-cream-300 px-3 py-1.5 text-xs text-warm-600 hover:border-bamboo-300 hover:text-bamboo-800" @click="copyMessage(msg.content)">
+                  <Copy class="h-3.5 w-3.5" />
+                  复制
+                </button>
+              </div>
+            </article>
+            <div v-if="msg.role === 'user'" class="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-2xl bg-white text-bamboo-900 shadow-sm">
+              <User class="h-5 w-5" />
+            </div>
+          </div>
+        </div>
+
+        <div class="flex-shrink-0 border-t border-cream-200 bg-white p-4">
+          <div class="flex items-end gap-3 rounded-2xl border border-cream-300 bg-cream-50 p-3">
+            <textarea v-model="input" rows="2" placeholder="直接问：本店卖点怎么表达？周末活动怎么做？这条差评怎么回复？" class="min-h-[56px] flex-1 resize-none bg-transparent px-1 py-1 text-[15px] leading-6 text-bamboo-950 outline-none placeholder:text-warm-400" :disabled="sending" @keydown.enter.exact.prevent="send" />
+            <button class="flex h-12 w-12 flex-shrink-0 items-center justify-center rounded-2xl bg-bamboo-900 text-bamboo-50 hover:bg-bamboo-800 disabled:cursor-not-allowed disabled:bg-cream-300 disabled:text-warm-500" :disabled="sending || !input.trim()" @click="send">
+              <Loader2 v-if="sending" class="h-5 w-5 animate-spin" />
+              <ArrowUp v-else class="h-5 w-5" />
+            </button>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <div v-if="clearDialogOpen" class="fixed inset-0 z-50 flex items-center justify-center bg-bamboo-950/45 p-4" @click.self="clearDialogOpen = false">
+      <section class="w-full max-w-md rounded-2xl border border-cream-300 bg-white p-5 shadow-2xl">
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <h2 class="text-base font-semibold text-bamboo-950">清空当前对话</h2>
+            <p class="mt-2 text-sm leading-6 text-warm-600">确定清空当前 AI 店长界面的对话内容吗？历史记录不会被删除。</p>
+          </div>
+          <button class="icon-button" @click="clearDialogOpen = false"><X class="h-4 w-4" /></button>
+        </div>
+        <div class="mt-5 flex justify-end gap-2">
+          <button class="secondary-button" @click="clearDialogOpen = false">取消</button>
+          <button class="danger-button" @click="confirmClear"><Trash2 class="h-4 w-4" />确认清空</button>
+        </div>
+      </section>
     </div>
   </div>
 </template>
+
+<style scoped>
+.brain-shell { grid-template-columns: 320px minmax(0, 1fr); }
+.brain-sidebar,.brain-chat { min-width: 0; }
+:deep(.brain-markdown) { color: #173826; font-size: 0.95rem; line-height: 1.8; }
+:deep(.brain-markdown > * + *) { margin-top: 1rem; }
+:deep(.brain-markdown h2) { color: #0f3522; font-size: 1.18rem; font-weight: 800; line-height: 1.45; }
+:deep(.brain-markdown h3) { color: #234d32; font-size: 1.02rem; font-weight: 800; line-height: 1.45; }
+:deep(.brain-markdown h4) { color: #5f7d46; font-size: 0.94rem; font-weight: 800; line-height: 1.45; }
+:deep(.brain-markdown p) { margin: 0; color: #2f4938; }
+:deep(.brain-markdown strong) { color: #0f3522; font-weight: 800; }
+:deep(.brain-markdown ul),:deep(.brain-markdown ol) { margin: 0; padding-left: 1.55rem; color: #2f4938; }
+:deep(.brain-markdown ul) { list-style: disc; }
+:deep(.brain-markdown ol) { list-style: decimal; }
+:deep(.brain-markdown li) { margin: 0.45rem 0; padding-left: 0.28rem; line-height: 1.75; }
+:deep(.brain-markdown li::marker) { color: #315b37; font-weight: 900; }
+:deep(.brain-markdown code) { border-radius: 0.35rem; background: #f4efe5; padding: 0.08rem 0.3rem; color: #5f5143; font-size: 0.88em; }
+:deep(.brain-table-wrap) { overflow-x: auto; border: 1px solid #eadfcc; border-radius: 0.9rem; background: #fffaf2; }
+:deep(.brain-markdown table) { width: 100%; min-width: 520px; border-collapse: collapse; font-size: 0.9rem; line-height: 1.65; }
+:deep(.brain-markdown th),:deep(.brain-markdown td) { border-bottom: 1px solid #eadfcc; padding: 0.65rem 0.8rem; text-align: left; vertical-align: top; }
+:deep(.brain-markdown th) { background: #f5ecdc; color: #27482f; font-weight: 800; }
+:deep(.brain-markdown tr:last-child td) { border-bottom: 0; }
+.brain-typing,
+.brain-streaming-note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  color: #315b37;
+  font-size: 0.86rem;
+  font-weight: 700;
+}
+.brain-typing i,
+.brain-streaming-note i {
+  height: 0.32rem;
+  width: 0.32rem;
+  border-radius: 999px;
+  background: #8cac77;
+  animation: brain-dot 1s infinite ease-in-out;
+}
+.brain-typing i:nth-of-type(2),
+.brain-streaming-note i:nth-of-type(2) { animation-delay: 0.14s; }
+.brain-typing i:nth-of-type(3),
+.brain-streaming-note i:nth-of-type(3) { animation-delay: 0.28s; }
+.brain-streaming-note {
+  margin-top: 0.8rem;
+  border-top: 1px solid #eadfcc;
+  padding-top: 0.65rem;
+  color: #8b7460;
+  font-size: 0.76rem;
+}
+@keyframes brain-dot {
+  0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+  40% { opacity: 1; transform: translateY(-0.18rem); }
+}
+.secondary-button,.danger-button,.icon-button { display: inline-flex; align-items: center; justify-content: center; gap: 0.4rem; border-radius: 0.7rem; font-size: 0.75rem; font-weight: 600; transition: 150ms ease; }
+.secondary-button { border: 1px solid #e5d8c5; background: white; color: #5f5143; padding: 0.6rem 0.85rem; }
+.secondary-button:hover,.icon-button:hover { border-color: #8cac77; background: #f7faf4; color: #234d32; }
+.danger-button { background: #b91c1c; color: white; padding: 0.6rem 0.85rem; }
+.danger-button:hover { background: #991b1b; }
+.icon-button { height: 2.25rem; width: 2.25rem; border: 1px solid #e5d8c5; color: #776655; }
+@media (max-width: 1023px) { .brain-shell { grid-template-columns: 1fr; } }
+.toast-enter-active,.toast-leave-active { transition: opacity 160ms ease, transform 160ms ease; }
+.toast-enter-from,.toast-leave-to { opacity: 0; transform: translateY(-8px); }
+</style>

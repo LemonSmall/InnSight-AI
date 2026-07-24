@@ -1,68 +1,66 @@
 package com.sushijia.repository.config;
 
 import com.baomidou.mybatisplus.annotation.DbType;
-import com.baomidou.mybatisplus.autoconfigure.ConfigurationCustomizer;
 import com.baomidou.mybatisplus.extension.plugins.MybatisPlusInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler;
 import com.baomidou.mybatisplus.extension.plugins.inner.PaginationInnerInterceptor;
+import com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor;
 import com.sushijia.framework.tenant.TenantContext;
-import com.sushijia.common.utils.JwtUtil;
+import net.sf.jsqlparser.expression.Expression;
+import net.sf.jsqlparser.expression.LongValue;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/**
- * MyBatis-Plus 配置 —— 多租户 + 分页
- */
+import java.util.Set;
+
 @Configuration
 @MapperScan("com.sushijia.repository.mapper")
 public class MyBatisPlusConfig {
 
+    private static final Set<String> TENANT_IGNORED_TABLES = Set.of(
+        "admins",
+        "tenants",
+        "system_settings",
+        "billing_rules",
+        "recharge_packages",
+        "ai_agent_bindings",
+        "ai_providers",
+        "ai_capabilities",
+        "ai_agent_configs",
+        "ai_call_logs",
+        "api_call_logs",
+        "credit_ledger",
+        "tenant_plans",
+        "content_results",
+        "prompt_templates",
+        "style_library",
+        "module_style_binding",
+        "moderation_rules",
+        "audit_logs"
+    );
+
     @Bean
     public MybatisPlusInterceptor mybatisPlusInterceptor() {
         MybatisPlusInterceptor interceptor = new MybatisPlusInterceptor();
+        interceptor.addInnerInterceptor(new TenantLineInnerInterceptor(new TenantLineHandler() {
+            @Override
+            public Expression getTenantId() {
+                Long tenantId = TenantContext.get();
+                return new LongValue(tenantId == null ? 0 : tenantId);
+            }
 
-        // 多租户插件：自动在所有 SQL 的 WHERE 中追加 tenant_id
-        // 注意：isolateSql=false 确保 JOIN 等复杂 SQL 也能正确处理
-        TenantTenantLineHandler handler = new TenantTenantLineHandler();
-        // 这里简化处理：对于不需要多租户的表，由 Mapper 自行指定 @SqlParser(filter = true)
+            @Override
+            public String getTenantIdColumn() {
+                return "tenant_id";
+            }
 
-        // 分页插件
+            @Override
+            public boolean ignoreTable(String tableName) {
+                return TENANT_IGNORED_TABLES.contains(tableName.toLowerCase());
+            }
+        }));
         interceptor.addInnerInterceptor(new PaginationInnerInterceptor(DbType.MYSQL));
-
         return interceptor;
-    }
-
-    /**
-     * 内部类：多租户拦截处理器
-     */
-    public static class TenantTenantLineHandler extends com.baomidou.mybatisplus.extension.plugins.inner.TenantLineInnerInterceptor {
-        public TenantTenantLineHandler() {
-            super(new com.baomidou.mybatisplus.extension.plugins.handler.TenantLineHandler() {
-                @Override
-                public net.sf.jsqlparser.expression.Expression getTenantId() {
-                    Long tid = TenantContext.get();
-                    return tid != null
-                        ? new net.sf.jsqlparser.expression.LongValue(tid)
-                        : new net.sf.jsqlparser.expression.LongValue(0);
-                }
-
-                @Override
-                public String getTenantIdColumn() {
-                    return "tenant_id";
-                }
-
-                @Override
-                public boolean ignoreTable(String tableName) {
-                    // 不需要租户隔离的表：全局配置表 + 后台专有表
-                    return "billing_rules".equalsIgnoreCase(tableName)
-                        || "recharge_packages".equalsIgnoreCase(tableName)
-                        || "admins".equalsIgnoreCase(tableName)
-                        || "prompt_templates".equalsIgnoreCase(tableName)
-                        || "style_library".equalsIgnoreCase(tableName)
-                        || "moderation_rules".equalsIgnoreCase(tableName)
-                        || "audit_logs".equalsIgnoreCase(tableName);
-                }
-            });
-        }
     }
 }

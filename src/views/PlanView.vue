@@ -17,6 +17,7 @@ const activePhase = ref('all')
 const editing = ref(false)
 const editName = ref('')
 const editFestival = ref('')
+const pageError = ref('')
 
 function loadPlan() {
   const id = (route.query.id as string) || store.plans[0]?.id
@@ -27,7 +28,16 @@ function loadPlan() {
   }
 }
 
-onMounted(loadPlan)
+onMounted(async () => {
+  if (!store.plans.length) {
+    try {
+      await store.loadFromApi()
+    } catch {
+      pageError.value = store.error || '营销方案加载失败，请稍后重试'
+    }
+  }
+  loadPlan()
+})
 watch(() => route.query.id, loadPlan)
 
 const badgeClassMap: Record<string, string> = {
@@ -66,50 +76,40 @@ function startEdit() {
   editing.value = true
 }
 
-function saveEdit() {
+async function saveEdit() {
   if (!plan.value) return
-  store.update(plan.value.id, { name: editName.value, festival: editFestival.value })
-  plan.value = store.getById(plan.value.id) || plan.value
-  editing.value = false
+  pageError.value = ''
+  try {
+    await store.update(plan.value.id, { name: editName.value, festival: editFestival.value })
+    plan.value = store.getById(plan.value.id) || plan.value
+    editing.value = false
+  } catch {
+    pageError.value = store.error || '营销方案保存失败，请稍后重试'
+  }
 }
 
-function setStatus(status: 'draft' | 'active' | 'completed') {
+async function setStatus(status: 'draft' | 'active' | 'completed') {
   if (!plan.value) return
-  store.update(plan.value.id, { status })
-  plan.value = store.getById(plan.value.id) || plan.value
+  pageError.value = ''
+  try {
+    await store.update(plan.value.id, { status })
+    plan.value = store.getById(plan.value.id) || plan.value
+  } catch {
+    pageError.value = store.error || '营销方案保存失败，请稍后重试'
+  }
 }
 
-function cpLine(el: HTMLElement) {
-  const text = el.childNodes[0].textContent?.trim() || ''
-  navigator.clipboard.writeText(text).then(() => {
-    const orig = el.innerHTML
-    el.style.background = '#EAF3DE'
-    el.style.color = '#27500A'
-    el.innerHTML = text + ' <span style="font-size:10px;color:#27500A">已复制</span>'
-    setTimeout(() => { el.innerHTML = orig; el.style.background = ''; el.style.color = '' }, 1500)
-  }).catch(() => {})
-}
-
-function cp(id: string) {
-  const el = document.getElementById(id) as HTMLTextAreaElement
-  if (!el) return
-  const text = el.value || el.textContent
-  navigator.clipboard.writeText(text).then(() => {
-    const b = document.querySelector(`[data-cp="${id}"]`)
-    if (b) {
-      const orig = b.innerHTML
-      b.innerHTML = '已复制'
-      setTimeout(() => b.innerHTML = orig, 1500)
-    }
-  }).catch(() => {})
-}
 </script>
 
 <template>
   <div class="max-w-5xl mx-auto" v-if="plan">
+    <div v-if="pageError" class="card border-rose-200 bg-rose-50 text-rose-700 text-sm mb-4">
+      {{ pageError }}
+    </div>
+
     <!-- 返回 + 头部 -->
     <div class="flex items-center gap-3 mb-5">
-      <button @click="router.push('/plans')" class="btn-ghost !px-2">
+      <button @click="router.push('/history/strategy')" class="btn-ghost !px-2">
         <ArrowLeft class="w-4 h-4" />
       </button>
       <div class="flex-1">
@@ -291,48 +291,20 @@ function cp(id: string) {
     </div>
 
     <!-- 文案示例 -->
-    <div class="card mb-5">
+    <div v-if="plan.copyExamples.length" class="card mb-5">
       <div class="flex items-center gap-2 mb-4">
         <Pencil class="w-5 h-5 text-purple-600" />
-        <span class="font-medium text-sm">核心文案示例 · 点击复制</span>
+        <span class="font-medium text-sm">核心文案示例</span>
       </div>
-      <div class="mb-4">
-        <div class="text-xs font-medium text-warm-600 uppercase tracking-wide mb-2">小红书爆款标题备选</div>
-        <div class="space-y-2">
-          <div
-            v-for="(line, li) in ['烟雨端午，我在莫干山竹林里等你','端午去哪儿？莫干山这家竹林民宿仅剩3间','不想人挤人？端午躲进莫干山竹林才是正解','莫干山私汤民宿｜端午3天，竹林雨夜只有我们']"
-            :key="li"
-            class="bg-cream-100 rounded-lg px-3 py-2 text-sm cursor-pointer hover:bg-bamboo-50 hover:text-bamboo-800 transition-colors"
-            @click="cpLine($event.target as HTMLElement)"
-          >
-            {{ line }} <span class="text-xs text-warm-600 ml-2">点击复制</span>
-          </div>
+      <div class="space-y-3">
+        <div v-for="copy in plan.copyExamples" :key="copy.label" class="relative">
+          <div class="text-xs font-medium text-warm-600 mb-2">{{ copy.label }}</div>
+          <textarea :value="copy.content" rows="4" readonly class="w-full text-xs p-3 rounded-lg border border-cream-300 bg-cream-100 resize-none" />
         </div>
       </div>
-      <div class="mb-4">
-        <div class="text-xs font-medium text-warm-600 uppercase tracking-wide mb-2">朋友圈 · 冲刺期晚间版</div>
-        <div class="relative">
-          <textarea id="wc1" rows="4" class="w-full text-xs p-3 rounded-lg border border-cream-300 bg-cream-100 resize-none" readonly>端午还有最后2间全景竹房
-
-窗外是整片竹海，私汤一泡，龙舟节也跟我没关系了。
-
-今天订，可以把端午3天的竹林都圈给你——文末扣1，直接给老粉价，比平台便宜。</textarea>
-          <button data-cp="wc1" class="btn-ghost absolute bottom-2 right-2 text-xs" @click="cp('wc1')">复制</button>
-        </div>
-      </div>
-      <div>
-        <div class="text-xs font-medium text-warm-600 uppercase tracking-wide mb-2">抖音口播 · 冲刺期</div>
-        <div class="relative">
-          <textarea id="dy1" rows="5" class="w-full text-xs p-3 rounded-lg border border-cream-300 bg-cream-100 resize-none" readonly>【镜头：推开竹林小径，雨滴打在竹叶上】
-
-总要来趟莫干山吧——
-
-下雨天的竹林，才是这里最好看的样子。端午还有最后2间竹景房，喜欢这种感觉的家人私信我，粉丝专属价。
-
-刷到这个视频的，就是有缘人。</textarea>
-          <button data-cp="dy1" class="btn-ghost absolute bottom-2 right-2 text-xs" @click="cp('dy1')">复制</button>
-        </div>
-      </div>
+    </div>
+    <div v-else class="card mb-5 text-sm text-warm-600">
+      当前方案没有保存文案示例。
     </div>
 
     <!-- 提醒 -->
@@ -350,19 +322,13 @@ function cp(id: string) {
       />
     </div>
 
-    <!-- 操作按钮 -->
-    <div class="flex flex-wrap gap-3">
-      <button class="btn-primary">生成礼包物料清单 ↗</button>
-      <button class="btn-secondary">生成小红书内容套装 ↗</button>
-      <button class="btn-secondary">生成活动话术脚本 ↗</button>
-    </div>
   </div>
 
   <!-- 空状态 -->
   <div v-else class="card text-center py-16">
     <FileText class="w-10 h-10 text-warm-600/30 mx-auto mb-3" />
     <p class="text-warm-600 mb-3">暂无方案数据</p>
-    <button @click="router.push('/plans')" class="btn-primary">
+    <button @click="router.push('/history/strategy')" class="btn-primary">
       <Plus class="w-4 h-4" />
       去新建方案
     </button>

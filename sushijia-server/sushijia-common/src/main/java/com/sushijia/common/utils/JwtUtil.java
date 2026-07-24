@@ -1,6 +1,9 @@
 package com.sushijia.common.utils;
 
-import io.jsonwebtoken.*;
+import io.jsonwebtoken.Claims;
+import io.jsonwebtoken.JwtBuilder;
+import io.jsonwebtoken.JwtException;
+import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.security.Keys;
 import lombok.extern.slf4j.Slf4j;
 
@@ -9,31 +12,26 @@ import java.nio.charset.StandardCharsets;
 import java.util.Date;
 import java.util.Map;
 
-/**
- * JWT 工具类
- */
 @Slf4j
 public class JwtUtil {
 
-    // 优先读取环境变量 JWT_SECRET，未设置则使用默认值
     private static final String SECRET = System.getenv("JWT_SECRET") != null
         ? System.getenv("JWT_SECRET")
         : "sushijia-ai-hotel-platform-secret-key-2026-must-be-longer";
     private static final SecretKey KEY = Keys.hmacShaKeyFor(SECRET.getBytes(StandardCharsets.UTF_8));
 
-    private static final long ACCESS_EXPIRE = 30 * 60 * 1000L;   // 30分钟
-    private static final long REFRESH_EXPIRE = 7 * 24 * 60 * 60 * 1000L; // 7天
+    private static final long ACCESS_EXPIRE = 30 * 60 * 1000L;
+    private static final long ADMIN_ACCESS_EXPIRE = 7 * 24 * 60 * 60 * 1000L;
+    private static final long REFRESH_EXPIRE = 7 * 24 * 60 * 60 * 1000L;
 
-    /**
-     * 生成 Access Token
-     */
     public static String createAccessToken(Long tenantId, Long staffId, String role, Long adminId) {
         return buildToken(tenantId, staffId, role, adminId, ACCESS_EXPIRE);
     }
 
-    /**
-     * 生成 Refresh Token
-     */
+    public static String createAdminAccessToken(Long adminId, String role) {
+        return buildToken(null, null, role, adminId, ADMIN_ACCESS_EXPIRE);
+    }
+
     public static String createRefreshToken(Long tenantId, Long staffId, String role, Long adminId) {
         return buildToken(tenantId, staffId, role, adminId, REFRESH_EXPIRE);
     }
@@ -59,9 +57,6 @@ public class JwtUtil {
         return builder.compact();
     }
 
-    /**
-     * 解析 Token 中的 Claims
-     */
     public static Map<String, Object> parseToken(String token) {
         try {
             Claims claims = Jwts.parser()
@@ -71,21 +66,15 @@ public class JwtUtil {
                     .getPayload();
             return claims;
         } catch (JwtException e) {
-            log.warn("JWT解析失败: {}", e.getMessage());
+            log.warn("JWT parse failed: {}", e.getMessage());
             return null;
         }
     }
 
-    /**
-     * 验证 Token 是否有效
-     */
     public static boolean validate(String token) {
         return parseToken(token) != null;
     }
 
-    /**
-     * 从 Token 获取 tenant_id
-     */
     public static Long getTenantId(String token) {
         Map<String, Object> claims = parseToken(token);
         if (claims == null) return null;

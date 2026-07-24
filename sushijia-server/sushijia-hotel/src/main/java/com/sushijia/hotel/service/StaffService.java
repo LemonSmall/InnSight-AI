@@ -33,7 +33,7 @@ public class StaffService {
 
     /** 新增员工 */
     @Transactional
-    public HotelStaff createStaff(String name, String phone, String role) {
+    public HotelStaff createStaff(String name, String phone, String role, String password) {
         Long tenantId = TenantContext.get();
         // 检查手机号不重复
         HotelStaff exist = staffMapper.findByPhone(phone);
@@ -47,9 +47,28 @@ public class StaffService {
         staff.setPhone(phone);
         staff.setRole(role);
         staff.setAvatar("");
-        staff.setPasswordHash(passwordEncoder.encode("123456")); // 默认密码
+        String initialPassword = (password == null || password.isBlank()) ? "123456" : password;
+        if (initialPassword.length() < 6) {
+            throw new BizException(ResultCode.BAD_REQUEST);
+        }
+        staff.setPasswordHash(passwordEncoder.encode(initialPassword));
         staffMapper.insert(staff);
         return staff;
+    }
+
+    /** 管理员重置员工密码 */
+    @Transactional
+    public void resetPassword(Long staffId, String newPassword) {
+        Long tenantId = TenantContext.get();
+        HotelStaff staff = staffMapper.selectById(staffId);
+        if (staff == null || !staff.getTenantId().equals(tenantId)) {
+            throw new BizException(ResultCode.NOT_FOUND);
+        }
+        if (newPassword == null || newPassword.length() < 6) {
+            throw new BizException(ResultCode.BAD_REQUEST);
+        }
+        staff.setPasswordHash(passwordEncoder.encode(newPassword));
+        staffMapper.updateById(staff);
     }
 
     /** 更新员工 */

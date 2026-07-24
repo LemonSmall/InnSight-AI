@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import api from '@/api'
+import { getCreditBalance, getCreditLedger, getSubscription } from '@/api/hotel'
 
 export interface CreditRecord {
   id: string
@@ -11,119 +11,148 @@ export interface CreditRecord {
   balance: number
   module: string
   detail: string
+  status: string
 }
 
-function generateId(): string {
-  return Date.now().toString(36) + Math.random().toString(36).slice(2, 7)
+interface CreditLedgerRow {
+  id: number | string
+  type: 'consume' | 'recharge'
+  amount: number
+  balanceAfter: number
+  moduleKey?: string
+  moduleName?: string
+  detail?: string
+  status?: string
+  createdAt?: string
 }
 
-const seedRecords: CreditRecord[] = [
-  { id: generateId(), date: '06-11', time: '14:22', type: 'consume', amount: -8, balance: 1228, module: '朋友圈文案', detail: '生成三档文案（早/中/晚）' },
-  { id: generateId(), date: '06-11', time: '10:08', type: 'consume', amount: -10, balance: 1236, module: '小红书营销', detail: '生成3个选题+完整图文' },
-  { id: generateId(), date: '06-11', time: '09:15', type: 'recharge', amount: 500, balance: 1246, module: '充值', detail: '月度套餐 · 500算力' },
-  { id: generateId(), date: '06-10', time: '20:45', type: 'consume', amount: -30, balance: 746, module: '营销海报', detail: '生成端午特惠海报' },
-  { id: generateId(), date: '06-10', time: '16:30', type: 'consume', amount: -12, balance: 776, module: '抖音口播', detail: '生成今日口播文案' },
-  { id: generateId(), date: '06-10', time: '11:20', type: 'consume', amount: -8, balance: 788, module: '朋友圈文案', detail: '生成三档文案' },
-  { id: generateId(), date: '06-10', time: '08:55', type: 'recharge', amount: 200, balance: 796, module: '充值', detail: '周套餐 · 200算力' },
-  { id: generateId(), date: '06-09', time: '15:12', type: 'consume', amount: -15, balance: 596, module: '公众号推文', detail: '生成端午推文' },
-  { id: generateId(), date: '06-09', time: '10:40', type: 'consume', amount: -20, balance: 611, module: 'AI修图', detail: '单张图片美化' },
-  { id: generateId(), date: '06-08', time: '18:05', type: 'consume', amount: -10, balance: 631, module: '小红书营销', detail: '生成3个选题+图文' },
-  { id: generateId(), date: '06-08', time: '09:30', type: 'recharge', amount: 500, balance: 641, module: '充值', detail: '月度套餐 · 500算力' },
-  { id: generateId(), date: '06-07', time: '14:18', type: 'consume', amount: -8, balance: 141, module: '朋友圈文案', detail: '生成三档文案' },
-  { id: generateId(), date: '06-07', time: '11:50', type: 'consume', amount: -30, balance: 149, module: '营销海报', detail: '生成促销海报' },
-  { id: generateId(), date: '06-06', time: '20:15', type: 'consume', amount: -12, balance: 179, module: '抖音口播', detail: '生成周末口播文案' },
-  { id: generateId(), date: '06-06', time: '09:00', type: 'recharge', amount: 200, balance: 191, module: '充值', detail: '周套餐 · 200算力' },
-  { id: generateId(), date: '06-05', time: '16:40', type: 'consume', amount: -10, balance: 401, module: '小红书营销', detail: '生成选题+图文' },
-  { id: generateId(), date: '06-05', time: '08:30', type: 'consume', amount: -8, balance: 411, module: '朋友圈文案', detail: '生成三档文案' },
-  { id: generateId(), date: '06-04', time: '17:55', type: 'recharge', amount: 500, balance: 419, module: '充值', detail: '首充赠送 · 500算力' },
-]
+interface TenantPlanRow {
+  code?: string
+  name?: string
+  enabledModules?: string
+  monthlyCredits?: number
+  maxBranches?: number
+}
+
+interface SubscriptionOverview {
+  active?: boolean
+  enabledModules?: string
+  plan?: TenantPlanRow | null
+  subscription?: Record<string, any> | null
+}
+
+function unwrap<T = any>(response: any): T {
+  return response?.data?.data ?? response?.data ?? response
+}
+
+function formatDate(value?: string): string {
+  if (!value) return ''
+  return value.length >= 10 ? value.slice(0, 10) : value
+}
+
+function formatTime(value?: string): string {
+  if (!value || value.length < 16) return ''
+  return value.slice(11, 16)
+}
+
+function mapLedger(row: CreditLedgerRow): CreditRecord {
+  return {
+    id: String(row.id),
+    date: formatDate(row.createdAt),
+    time: formatTime(row.createdAt),
+    type: row.type,
+    amount: Number(row.amount || 0),
+    balance: Number(row.balanceAfter || 0),
+    module: row.moduleName || row.moduleKey || (row.type === 'recharge' ? '充值' : 'AI调用'),
+    detail: row.detail || '',
+    status: row.status || 'success',
+  }
+}
 
 export const useCreditsStore = defineStore('credits', () => {
-  const records = ref<CreditRecord[]>(loadRecords())
+  const records = ref<CreditRecord[]>([])
+  const balance = ref(0)
+  const todayConsume = ref(0)
+  const loading = ref(false)
+  const error = ref('')
+  const subscription = ref<SubscriptionOverview | null>(null)
 
-  const currentBalance = computed(() => {
-    if (records.value.length === 0) return 0
-    return records.value[0].balance
-  })
-
+  const currentBalance = computed(() => balance.value)
   const consumeRecords = computed(() => records.value.filter(r => r.type === 'consume'))
   const rechargeRecords = computed(() => records.value.filter(r => r.type === 'recharge'))
-
-  const todayConsume = computed(() => {
-    const today = new Date()
-    const md = `${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`
-    return consumeRecords.value
-      .filter(r => r.date === md)
-      .reduce((s, r) => s + Math.abs(r.amount), 0)
+  const currentPlan = computed(() => subscription.value?.plan || null)
+  const enabledModules = computed(() => {
+    const raw = subscription.value?.enabledModules || subscription.value?.plan?.enabledModules || ''
+    return raw.split(',').map(item => item.trim()).filter(Boolean)
   })
 
-  function consume(amount: number, module: string, detail: string) {
-    // 后端已扣减，前端只刷新
-    loadFromApi()
-  }
-
-  function recharge(amount: number, detail: string) {
-    loadFromApi()
-  }
-
-  /** 从后端加载算力数据 */
-  async function loadFromApi() {
+  async function loadFromApi(type?: 'consume' | 'recharge') {
+    loading.value = true
+    error.value = ''
+    let failed = false
     try {
-      const { data: res } = await api.get('/api/hotel/credits/balance')
-      const d = res.data || res
-      if (d.balance !== undefined) {
-        // 更新当前余额到第一条记录的balance
-        // 简化处理：直接更新种子数据的第一条
-        const today = todayStr()
-        const time = nowTime()
-        if (records.value.length > 0) {
-          records.value[0].balance = d.balance
-        }
-      }
-      // 同时拉取流水
-      try {
-        const { data: ledger } = await api.get('/api/hotel/credits/ledger?limit=50')
-        const list = ledger.data || ledger
-        if (Array.isArray(list) && list.length > 0) {
-          // 将后端流水映射为前端格式
-          records.value = list.map((r: any) => ({
-            id: String(r.id),
-            date: r.createdAt ? r.createdAt.slice(5, 10) : todayStr(),
-            time: r.createdAt ? r.createdAt.slice(11, 16) : nowTime(),
-            type: r.type as 'consume' | 'recharge',
-            amount: r.amount,
-            balance: r.balanceAfter,
-            module: r.moduleName || r.moduleKey || r.module || '',
-            detail: r.detail || '',
-          }))
-        }
-      } catch { /* 静默回退 */ }
-    } catch { /* 静默回退到本地数据 */ }
-  }
+      const balanceResponse = await getCreditBalance()
+      const balanceData = unwrap<{ balance?: number; todayConsume?: number }>(balanceResponse)
+      balance.value = Number(balanceData.balance || 0)
+      todayConsume.value = Number(balanceData.todayConsume || 0)
+    } catch {
+      failed = true
+      balance.value = 0
+      todayConsume.value = 0
+    }
 
-  function todayStr(): string {
-    const d = new Date()
-    return `${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-  }
-
-  function nowTime(): string {
-    const d = new Date()
-    return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
-  }
-
-  function persist() {
-    try { localStorage.setItem('credits_records', JSON.stringify(records.value)) } catch {}
-  }
-
-  function loadRecords(): CreditRecord[] {
     try {
-      const d = localStorage.getItem('credits_records')
-      return d ? JSON.parse(d) : seedRecords
-    } catch { return seedRecords }
+      const ledgerResponse = await getCreditLedger(100, type)
+      const ledgerData = unwrap<CreditLedgerRow[]>(ledgerResponse)
+      records.value = Array.isArray(ledgerData) ? ledgerData.map(mapLedger) : []
+    } catch {
+      failed = true
+      records.value = []
+    }
+
+    try {
+      const subscriptionResponse = await getSubscription()
+      subscription.value = unwrap<SubscriptionOverview>(subscriptionResponse)
+    } catch {
+      failed = true
+      subscription.value = null
+    }
+
+    if (failed) {
+      error.value = '算力数据加载失败，请稍后重试'
+      loading.value = false
+      throw new Error(error.value)
+    }
+
+    loading.value = false
+  }
+
+  async function consume() {
+    await loadFromApi()
+  }
+
+  async function recharge() {
+    await loadFromApi()
+  }
+
+  function canUseModule(moduleKey: string) {
+    return Boolean(subscription.value?.active && enabledModules.value.includes(moduleKey))
   }
 
   return {
-    records, currentBalance, consumeRecords, rechargeRecords,
-    todayConsume, consume, recharge,
+    records,
+    loading,
+    error,
+    subscription,
+    currentPlan,
+    enabledModules,
+    currentBalance,
+    consumeRecords,
+    rechargeRecords,
+    todayConsume,
+    loadFromApi,
+    consume,
+    recharge,
+    canUseModule,
   }
 })

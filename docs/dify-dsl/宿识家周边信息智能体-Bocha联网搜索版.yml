@@ -1,0 +1,560 @@
+app:
+  description: 使用博查中文联网搜索获取酒店周边房价线索、周边酒店、热点地点、本地活动与可核验证据，输出项目可解析 JSON。
+  icon: 📍
+  icon_background: "#DCFCE7"
+  icon_type: emoji
+  mode: workflow
+  name: 宿识家周边信息智能体 Bocha联网搜索版
+  use_icon_as_answer_icon: false
+dependencies:
+  - current_identifier: null
+    type: marketplace
+    value:
+      marketplace_plugin_unique_identifier: langgenius/deepseek:0.0.19@5b68617c637b62d31e7f33a9f5677b76e88f81868fb04a728e208588564b72ea
+      version: null
+  - current_identifier: null
+    type: marketplace
+    value:
+      marketplace_plugin_unique_identifier: seekerliu/bocha:0.0.1@7d2dbad3f9d2652300d73bb8d91337e925f3c0daf9e0a9e285e060fb9dd7aadb
+      version: null
+kind: app
+version: 0.6.0
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      allowed_file_extensions:
+        - .JPG
+        - .JPEG
+        - .PNG
+        - .GIF
+        - .WEBP
+        - .SVG
+      allowed_file_types:
+        - image
+      allowed_file_upload_methods:
+        - local_file
+        - remote_url
+      enabled: false
+      fileUploadConfig:
+        attachment_image_file_size_limit: 2
+        audio_file_size_limit: 50
+        batch_count_limit: 5
+        file_size_limit: 15
+        file_upload_limit: 20
+        image_file_batch_limit: 10
+        image_file_size_limit: 10
+        single_chunk_attachment_limit: 10
+        video_file_size_limit: 100
+        workflow_file_upload_limit: 10
+      image:
+        enabled: false
+        number_limits: 3
+        transfer_methods:
+          - local_file
+          - remote_url
+      number_limits: 3
+    opening_statement: 请输入绑定酒店信息，系统会汇总周边实时经营线索。
+    retriever_resource:
+      enabled: false
+    sensitive_word_avoidance:
+      enabled: false
+    speech_to_text:
+      enabled: false
+    suggested_questions: []
+    suggested_questions_after_answer:
+      enabled: false
+    text_to_speech:
+      enabled: false
+      language: ""
+      voice: ""
+  graph:
+    edges:
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: tool
+          targetType: llm
+        id: 1784528299525-source-llm-target
+        source: "1784528299525"
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInLoop: false
+          sourceType: start
+          targetType: tool
+        id: start-source-1784528299525-target
+        source: start
+        sourceHandle: source
+        target: "1784528299525"
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: llm
+          targetType: code
+        id: llm-source-json_cleaner-target
+        source: llm
+        sourceHandle: source
+        target: json_cleaner
+        targetHandle: target
+        type: custom
+        zIndex: 0
+      - data:
+          isInIteration: false
+          isInLoop: false
+          sourceType: code
+          targetType: end
+        id: json_cleaner-source-end-target
+        source: json_cleaner
+        sourceHandle: source
+        target: end
+        targetHandle: target
+        type: custom
+        zIndex: 0
+    nodes:
+      - data:
+          desc: 后端传入绑定酒店和本次搜索参数
+          selected: false
+          title: 开始
+          type: start
+          variables:
+            - label: 酒店与调用上下文JSON
+              max_length: 50000
+              options: []
+              required: true
+              type: text-input
+              variable: commonContextJson
+            - label: 本次周边搜索参数JSON
+              max_length: 50000
+              options: []
+              required: true
+              type: text-input
+              variable: businessParamsJson
+            - label: 已确认知识上下文JSON
+              max_length: 50000
+              options: []
+              required: false
+              type: text-input
+              variable: knowledgeContextJson
+            - label: 兼容搜索指令
+              max_length: 10000
+              options: []
+              required: false
+              type: text-input
+              variable: message
+            - label: 绑定酒店名称
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: hotelName
+            - label: 城市
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: city
+            - label: 酒店详细地址
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: address
+            - label: 经度
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: longitude
+            - label: 纬度
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: latitude
+            - label: 入住日期
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: checkIn
+            - label: 离店日期
+              max_length: 20000
+              options: []
+              required: false
+              type: text-input
+              variable: checkOut
+            - label: 搜索任务
+              max_length: 10000
+              options: []
+              required: true
+              type: text-input
+              variable: query
+        height: 370
+        id: start
+        position:
+          x: 8.75
+          y: 233.75
+        positionAbsolute:
+          x: 8.75
+          y: 233.75
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 242
+      - data:
+          context:
+            enabled: false
+            variable_selector: []
+          desc: 读取 Tavily 搜索证据后，汇总真实周边经营情报
+          memory:
+            enabled: false
+            role_prefix:
+              assistant: ""
+              user: ""
+            window:
+              enabled: false
+              size: 10
+          model:
+            completion_params:
+              temperature: 0.2
+              top_p: 0.9
+            mode: chat
+            name: deepseek-v4-pro
+            provider: langgenius/deepseek/deepseek
+          prompt_template:
+            - id: system
+              role: system
+              text: |-
+                你是“宿识家周边信息智能体”，角色是外部情报搜索员，不是 AI 店长，不做最终定价决策，不输出营销方案。
+
+                你必须使用上游“博查中文联网搜索”节点返回的公开网页结果作为主要依据。你不能编造价格、房型、事件、热点、距离、天气、酒店设施或平台政策。搜索结果为空、乱码、无关、过旧、没有明确价格时，必须在 unavailableFields 和对应 note 中说明。
+                你必须围绕 commonContextJson、businessParamsJson、knowledgeContextJson 和 query 主动检索并抽取。hotelName、city、address、longitude、latitude、checkIn、checkOut 只是后端为 Dify 调试和工具 query 提供的冗余字段；如与 JSON 冲突，以 commonContextJson 和 businessParamsJson 为准。
+                你需要主动检索并抽取：
+                1. 当前酒店公开房价和房型。
+                2. 周边竞品酒店、民宿、客栈、酒店式公寓的公开房价和房型。
+                3. 周边热门地点、商圈、景点、交通枢纽、会展中心、医院、大学、夜市、步行街。
+                4. 近期活动、展会、演出、考试、赛事、节假日或本地热点。
+                5. 入住日期附近天气。
+
+                重要：只输出 JSON 对象本身。禁止输出 Markdown、代码围栏、解释文字、推理过程、<think>、分析段落。第一个字符必须是 {，最后一个字符必须是 }。
+
+                输出字段必须兼容宿识家项目：
+                {
+                  "provider": "bocha",
+                  "fallback": false,
+                  "queriedAt": "ISO时间",
+                  "hotelProfileSuggestion": {"name":"","type":"","city":"","tags":"","targetAudience":"","nearby":"","businessArea":""},
+                  "currentHotelPrices": [{"hotelName":"","roomType":"","price":"","currency":"CNY","checkIn":"","checkOut":"","platform":"","source":"","sourceUrl":"","queriedAt":"","confidence":"high|medium|low","note":""}],
+                  "nearbyHotelPrices": [{"hotelName":"","distanceOrArea":"","roomType":"","price":"","currency":"CNY","checkIn":"","checkOut":"","platform":"","source":"","sourceUrl":"","queriedAt":"","confidence":"high|medium|low","note":""}],
+                  "nearbyHotPlaces": [{"name":"","category":"","reason":"","distanceOrArea":"","source":"","sourceUrl":"","confidence":"high|medium|low"}],
+                  "localEvents": [{"title":"","date":"","location":"","impact":"","source":"","sourceUrl":"","confidence":"high|medium|low"}],
+                  "weather": {"summary":"","temperature":"","source":"","sourceUrl":"","queriedAt":"","confidence":"high|medium|low"},
+                  "searchEvidence": [{"title":"","url":"","source":"","queriedAt":"","usedFor":""}],
+                  "unavailableFields": []
+                }
+
+                判断规则：
+                - 当前酒店必须优先匹配 hotelName、address、city；名称不完全一致时不能当作同一家，note 标注“酒店身份待核实”。
+                - 价格必须是网页结果中明确出现的数字价格；没有明确价格时 price 留空，不得根据挂牌价、经验或同类酒店估算。
+                - 周边酒店只允许酒店、民宿、客栈、酒店式公寓等住宿业态参与比较。
+                - 周边热点地点必须与 city 或 address 所在区域相关；距离未知时 distanceOrArea 写“距离待核实”。
+                - 事件必须有日期、地点和来源；否则 localEvents 留空。
+                - searchEvidence 只放被实际采用的信息源，不放明显无关结果。
+                - 不得根据搜索结果直接建议涨价、降价、促销或营销动作；这属于策略 LLM 的职责。
+                - 如果博查搜索结果为空、搜索证据为空，fallback 必须为 true；如果只是部分字段缺失，fallback 保持 false，并在 unavailableFields 用中文说明缺口。
+            - id: user
+              role: user
+              text: |-
+                酒店与调用上下文：
+                {{#start.commonContextJson#}}
+
+                本次搜索参数：
+                {{#start.businessParamsJson#}}
+
+                已确认知识上下文：
+                {{#start.knowledgeContextJson#}}
+
+                显式字段：
+                - hotelName：{{#start.hotelName#}}
+                - city：{{#start.city#}}
+                - address：{{#start.address#}}
+                - longitude：{{#start.longitude#}}
+                - latitude：{{#start.latitude#}}
+                - checkIn：{{#start.checkIn#}}
+                - checkOut：{{#start.checkOut#}}
+                - query：{{#start.query#}}
+                - message：{{#start.message#}}
+
+                博查联网搜索结果：
+                {{#1784528299525.text#}}
+
+                请基于博查结果生成严格 JSON。优先抽取：
+                1. 当前酒店公开可见房型和价格；
+                2. 同城同区或地址周边的酒店/民宿房型和价格；
+                3. 可用于营销/定价的热门地点、活动、天气线索；
+                4. 每条采用信息的标题、URL、来源和用途。
+
+                如果博查结果没有命中输入 hotelName 对应酒店，必须明确写入 unavailableFields，不要使用相似但不同名酒店冒充。
+          selected: false
+          structured_output:
+            enabled: false
+          title: 周边实时信息汇总
+          type: llm
+          variables: []
+          vision:
+            enabled: false
+        height: 131
+        id: llm
+        position:
+          x: 833.75
+          y: 202.49999999999997
+        positionAbsolute:
+          x: 833.75
+          y: 202.49999999999997
+        selected: true
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 241
+      - data:
+          desc: 返回清洗后的严格 JSON 字符串
+          outputs:
+            - variable: output
+              value_selector:
+                - json_cleaner
+                - output
+              value_type: string
+          selected: false
+          title: 结束
+          type: end
+        height: 115
+        id: end
+        position:
+          x: 1390
+          y: 260
+        positionAbsolute:
+          x: 1390
+          y: 260
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 241
+      - data:
+          is_team_authorization: false
+          paramSchemas:
+            - auto_generate: null
+              default: null
+              form: llm
+              human_description:
+                en_US: The keywords or phrases to search
+                ja_JP: 検索キーワードまたはフレーズ
+                pt_BR: As palavras-chave ou frases para pesquisar
+                zh_Hans: 搜索关键词或语句
+              label:
+                en_US: query
+                ja_JP: query
+                pt_BR: query
+                zh_Hans: query
+              llm_description: 搜索关键词或语句
+              max: null
+              min: null
+              name: query
+              options: []
+              placeholder: null
+              precision: null
+              required: true
+              scope: null
+              template: null
+              type: string
+            - auto_generate: null
+              default: noLimit
+              form: llm
+              human_description:
+                en_US: The time range for the search results. Available options noLimit, oneYear, oneMonth, oneWeek, oneDay. Default is noLimit
+                ja_JP: 検索結果の時間範囲。利用可能なオプションは noLimit, oneYear, oneMonth, oneWeek, oneDay です。デフォルトは noLimit です
+                pt_BR: O intervalo de tempo para os resultados da pesquisa. Opções disponíveis noLimit, oneYear, oneMonth, oneWeek, oneDay. O padrão é noLimit
+                zh_Hans: 搜索的时间范围，可选值为 noLimit, oneYear, oneMonth, oneWeek, oneDay。默认为 noLimit
+              label:
+                en_US: freshness
+                ja_JP: freshness
+                pt_BR: freshness
+                zh_Hans: freshness
+              llm_description: 搜索的时间范围，可选值为 noLimit, oneYear, oneMonth, oneWeek, oneDay。默认为 noLimit
+              max: null
+              min: null
+              name: freshness
+              options: []
+              placeholder: null
+              precision: null
+              required: false
+              scope: null
+              template: null
+              type: string
+            - auto_generate: null
+              default: 10
+              form: llm
+              human_description:
+                en_US: Number of search results to retrieve (1-10), default is 10
+                ja_JP: 検索結果の数(1-10)、デフォルトは10
+                pt_BR: Número de resultados de pesquisa para recuperar (1-10), padrão é 10
+                zh_Hans: 搜索结果的数量(1-10)，默认为10
+              label:
+                en_US: count
+                ja_JP: count
+                pt_BR: count
+                zh_Hans: count
+              llm_description: 搜索结果的数量(1-10)，默认为10
+              max: 10
+              min: 1
+              name: count
+              options: []
+              placeholder: null
+              precision: null
+              required: false
+              scope: null
+              template: null
+              type: number
+          params:
+            count: ""
+            freshness: ""
+            query: ""
+          plugin_id: seekerliu/bocha
+          plugin_unique_identifier: seekerliu/bocha:0.0.1@7d2dbad3f9d2652300d73bb8d91337e925f3c0daf9e0a9e285e060fb9dd7aadb
+          provider_icon: /console/api/workspaces/current/plugin/icon?tenant_id=bcd767da-5317-4e0a-b194-bd40d04cfbac&filename=6fc9b088775e6989b928672f2d8aeb764bdfd017127d04ed71fea55089c5aa74.svg
+          provider_id: seekerliu/bocha/bocha
+          provider_name: seekerliu/bocha/bocha
+          provider_show_name: 博查
+          provider_type: builtin
+          selected: true
+          title: 博查中文联网搜索
+          tool_configurations: {}
+          tool_description: 从博查搜索全网信息和网页链接，返回结果包括网页标题、网页URL、网页摘要、网站名称、网站图标、发布时间、图片链接等
+          tool_label: Bocha Web Search
+          tool_name: BochaWebSearch
+          tool_node_version: "2"
+          tool_parameters:
+            count:
+              type: constant
+              value: 10
+            freshness:
+              type: mixed
+              value: noLimit
+            query:
+              type: mixed
+              value: "{{#start.city#}} {{#start.hotelName#}} {{#start.address#}} {{#start.longitude#}},{{#start.latitude#}} {{#start.checkIn#}} {{#start.checkOut#}} {{#start.query#}} 酒店 房型 价格 预订 周边酒店 民宿 客栈 酒店式公寓 携程 美团 大众点评 高德 地图 热门景点 活动 天气"
+          type: tool
+          desc: 搜索当前酒店、同城同区酒店房型价格、周边热门地点、本地活动和天气线索。
+        height: 51
+        id: "1784528299525"
+        position:
+          x: 487.4999999999999
+          y: 243.75
+        positionAbsolute:
+          x: 487.4999999999999
+          y: 243.75
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        type: custom
+        width: 241
+      - id: json_cleaner
+        type: custom
+        height: 54
+        width: 244
+        position:
+          x: 1160
+          y: 202.5
+        positionAbsolute:
+          x: 1160
+          y: 202.5
+        selected: false
+        sourcePosition: right
+        targetPosition: left
+        data:
+          desc: 去除思考过程和代码围栏，只返回宿识家后端可解析的 JSON 字符串
+          title: JSON 输出清洗
+          type: code
+          code_language: python3
+          code: |-
+            import json
+            import re
+
+            def _strip_think(text: str) -> str:
+                text = text or ""
+                text = re.sub(r"<think>[\s\S]*?</think>", "", text, flags=re.I)
+                text = re.sub(r"^\s*`{3}(?:json)?\s*", "", text, flags=re.I)
+                text = re.sub(r"\s*`{3}\s*$", "", text)
+                return text.strip()
+
+            def _extract_json(text: str) -> dict:
+                cleaned = _strip_think(text)
+                try:
+                    return json.loads(cleaned)
+                except Exception:
+                    pass
+                start = cleaned.find("{")
+                end = cleaned.rfind("}")
+                if start >= 0 and end > start:
+                    candidate = cleaned[start:end + 1]
+                    try:
+                        return json.loads(candidate)
+                    except Exception:
+                        pass
+                return {
+                    "provider": "bocha",
+                    "fallback": True,
+                    "queriedAt": "",
+                    "hotelProfileSuggestion": {"name":"","type":"","city":"","tags":"","targetAudience":"","nearby":"","businessArea":""},
+                    "currentHotelPrices": [],
+                    "nearbyHotelPrices": [],
+                    "nearbyHotPlaces": [],
+                    "localEvents": [],
+                    "weather": {"summary":"","source":"","queriedAt":""},
+                    "searchEvidence": [],
+                    "unavailableFields": ["LLM 未返回可解析 JSON，已清洗失败"],
+                    "rawText": cleaned[:2000]
+                }
+
+            def main(text: str) -> dict:
+                data = _extract_json(text)
+                data.setdefault("provider", "bocha")
+                data.setdefault("fallback", False)
+                data.setdefault("currentHotelPrices", [])
+                data.setdefault("nearbyHotelPrices", [])
+                data.setdefault("nearbyHotPlaces", [])
+                data.setdefault("localEvents", [])
+                data.setdefault("searchEvidence", [])
+                data.setdefault("unavailableFields", [])
+                evidence = data.get("searchEvidence") or []
+                useful_lists = (data.get("currentHotelPrices") or []) + (data.get("nearbyHotelPrices") or []) + (data.get("nearbyHotPlaces") or []) + (data.get("localEvents") or [])
+                if not evidence and not useful_lists:
+                    data["fallback"] = True
+                    if not data["unavailableFields"]:
+                        data["unavailableFields"] = ["联网搜索未返回可用证据"]
+                return {"output": json.dumps(data, ensure_ascii=False)}
+          variables:
+            - value_selector:
+                - llm
+                - text
+              value_type: string
+              variable: text
+          outputs:
+            output:
+              type: string
+              children: null
+          selected: false
+    viewport:
+      x: 13.100000000000136
+      y: 137.00000000000003
+      zoom: 0.7999999999999999
+  rag_pipeline_variables: []

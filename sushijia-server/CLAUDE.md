@@ -22,8 +22,7 @@ sushijia-server (父 POM)
 └── sushijia-admin         # 管理后台业务（Controller）
 ```
 
-### 依赖关系
-
+### 依赖关系····················
 ```
 sushijia-common (无内部依赖)
     ↑

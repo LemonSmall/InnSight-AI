@@ -39,6 +39,17 @@ public class AuthController {
     }
 
     /**
+     * 手机号 + 密码登录
+     */
+    @PostMapping("/login/password")
+    public R<Map<String, String>> loginByPassword(@RequestBody Map<String, String> body) {
+        String phone = body.get("phone");
+        String password = body.get("password");
+        Map<String, String> tokens = authService.loginByPassword(phone, password);
+        return R.ok(tokens);
+    }
+
+    /**
      * Refresh Token 换取新 Access Token
      */
     @PostMapping("/token/refresh")

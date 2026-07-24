@@ -19,4 +19,5 @@ public class RoomType {
     private BigDecimal basePrice;
     private Integer count;
     private Integer sortOrder;
+    private Integer enabled;
 }

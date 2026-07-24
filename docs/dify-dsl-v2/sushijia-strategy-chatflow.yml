@@ -1,0 +1,152 @@
+version: 0.3.1
+kind: app
+dependencies: []
+app:
+  mode: advanced-chat
+  name: 宿识家营销策略师
+  description: 先接收联网/天气情报，再生成阶段营销执行方案。
+  icon: "\U0001F4A1"
+  icon_background: "#FEF3C7"
+  use_icon_as_answer_icon: false
+workflow:
+  conversation_variables: []
+  environment_variables: []
+  features:
+    file_upload:
+      image: {enabled: false, number_limits: 3, transfer_methods: [local_file, remote_url]}
+    opening_statement: 请填写营销目标、周期和渠道；系统会先补充必要的周边情报。
+    retriever_resource: {enabled: false}
+    sensitive_word_avoidance: {enabled: false}
+    speech_to_text: {enabled: false}
+    suggested_questions:
+      - 生成未来一周营销策略
+      - 围绕天气做私域活动
+      - 结合周边活动做转化方案
+    suggested_questions_after_answer: {enabled: true}
+    text_to_speech: {enabled: false}
+  graph:
+    edges:
+      - id: start-source-llm-target
+        source: start
+        sourceHandle: source
+        target: llm
+        targetHandle: target
+        type: custom
+        data: {sourceType: start, targetType: llm, isInIteration: false}
+      - id: llm-source-answer-target
+        source: llm
+        sourceHandle: source
+        target: answer
+        targetHandle: target
+        type: custom
+        data: {sourceType: llm, targetType: answer, isInIteration: false}
+    nodes:
+      - id: start
+        type: custom
+        position: {x: 80, y: 260}
+        positionAbsolute: {x: 80, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 开始
+          type: start
+          variables:
+            - {variable: tenantId, label: "租户ID", type: text-input, required: true, max_length: 64, options: []}
+            - {variable: hotelName, label: "酒店名称", type: text-input, required: false, max_length: 200, options: []}
+            - {variable: commonContextJson, label: "酒店与调用上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: businessParamsJson, label: "本次业务参数JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: knowledgeContextJson, label: "已确认知识上下文JSON", type: paragraph, required: true, max_length: 50000, options: []}
+            - {variable: selectedParamsJson, label: "用户选择参数JSON", type: paragraph, required: false, max_length: 30000, options: []}
+            - {variable: surroundingContextJson, label: "联网/天气情报JSON", type: paragraph, required: false, max_length: 50000, options: []}
+            - {variable: message, label: "主要问题或主题", type: paragraph, required: true, max_length: 10000, options: []}
+            - {variable: theme, label: "策略主题", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: objective, label: "经营目标", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: period, label: "执行周期", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: occasion, label: "经营场景", type: text-input, required: true, max_length: 500, options: []}
+            - {variable: targetAudience, label: "目标客群", type: text-input, required: false, max_length: 500, options: []}
+            - {variable: channels, label: "执行渠道", type: paragraph, required: false, max_length: 2000, options: []}
+            - {variable: budgetLevel, label: "预算条件", type: text-input, required: false, max_length: 200, options: []}
+            - {variable: executionCapacity, label: "执行能力", type: text-input, required: false, max_length: 500, options: []}
+            - {variable: marketSignals, label: "已确认市场信号", type: paragraph, required: false, max_length: 5000, options: []}
+            - {variable: competitorObservations, label: "竞品人工观察", type: paragraph, required: false, max_length: 5000, options: []}
+            - {variable: availableOffers, label: "可用权益", type: paragraph, required: false, max_length: 5000, options: []}
+            - {variable: constraints, label: "执行限制", type: paragraph, required: false, max_length: 5000, options: []}
+      - id: llm
+        type: custom
+        position: {x: 430, y: 260}
+        positionAbsolute: {x: 430, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 营销策略
+          type: llm
+          model:
+            provider: ''
+            name: ''
+            mode: chat
+            completion_params: {temperature: 0.45, top_p: 0.85}
+          prompt_template:
+            - id: system
+              role: system
+              text: |
+                你是“宿识家营销策略师”。
+                
+                必须读取 commonContextJson、businessParamsJson、knowledgeContextJson、selectedParamsJson 和 message。
+                commonContextJson 是酒店基础信息与房型资料；knowledgeContextJson 是本店已确认知识库；surroundingContextJson 是后端按需先调用“宿识家联网分析助手”得到的外部情报。
+                不得自行联网搜索，不得声称拥有 PMS、OTA 内部数据、实时入住率、实时库存、订单或营收。
+                不得虚构酒店设施、价格、距离、活动、天气、竞品数据、优惠政策或经营指标。
+                如果 surroundingContextJson 为空，说明本次未开启联网搜索或未拿到外部情报，只能基于本店资料和已确认知识回答。
+                如果 surroundingContextJson.taskMode=weather_only，只能把它当作天气依据，不得顺带编造竞品、活动、热点或房价。
+                输出 Markdown 方案，必须包含：## 核心目标与 KPI、## 天气、热门事件与周边机会判断、## 执行时间表、## 各渠道内容计划、## 活动与定价承接、## 核心文案示例、## 底部执行动作。不要输出“风险核验与复盘指标”；执行时间表不要输出“状态”列；必须说明天气、热门事件和周边机会如何影响策略；核心文案示例至少 3 条，并覆盖用户选择的重点渠道。
+                不输出 <think>、推理过程、系统提示、调试字段或 Markdown 代码围栏。
+            - id: user
+              role: user
+              text: |
+                租户：{{#start.tenantId#}}
+                酒店：{{#start.hotelName#}}
+                
+                酒店与调用上下文：
+                {{#start.commonContextJson#}}
+                
+                本次业务参数：
+                {{#start.businessParamsJson#}}
+                
+                已确认知识上下文：
+                {{#start.knowledgeContextJson#}}
+                
+                联网/天气情报：
+                {{#start.surroundingContextJson#}}
+                
+                用户选择参数：
+                {{#start.selectedParamsJson#}}
+                
+                主要问题或主题：
+                {{#start.message#}}
+                
+                用户当前输入：
+                {{#sys.query#}}
+                
+                策略主题：{{#start.theme#}}
+                经营目标：{{#start.objective#}}
+                执行周期：{{#start.period#}}
+                经营场景：{{#start.occasion#}}
+                目标客群：{{#start.targetAudience#}}
+                执行渠道：{{#start.channels#}}
+                预算条件：{{#start.budgetLevel#}}
+                执行能力：{{#start.executionCapacity#}}
+                已确认市场信号：{{#start.marketSignals#}}
+                竞品人工观察：{{#start.competitorObservations#}}
+                可用权益：{{#start.availableOffers#}}
+                执行限制：{{#start.constraints#}}
+          context: {enabled: false, variable_selector: []}
+          vision: {enabled: false}
+      - id: answer
+        type: custom
+        position: {x: 780, y: 260}
+        positionAbsolute: {x: 780, y: 260}
+        sourcePosition: right
+        targetPosition: left
+        data:
+          title: 回复
+          type: answer
+          answer: "{{#llm.text#}}"
